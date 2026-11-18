@@ -8,6 +8,7 @@ import type { Mate, Part } from '../types';
 import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from './GroupList';
 import { IconChevron, IconEye, IconEyeOff, IconLink } from './icons';
 import { MateList } from './MateList';
+import { FeatureTree } from './modeling/FeatureTree';
 
 /** Parçaları otomatik kapalı başlatma eşiği */
 const COLLAPSE_THRESHOLD = 40;
@@ -106,6 +107,7 @@ export function PartTree() {
         <span>Montaj ağacı</span>
         <span className="panel-meta">{total} parça</span>
       </header>
+      <FeatureTree />
       <div className="panel-body tree" role="tree" aria-label="Montaj ağacı">
         {instanceIds.length === 0 ? (
           <div className="empty-hint">Henüz parça yok</div>

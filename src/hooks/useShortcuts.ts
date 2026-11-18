@@ -18,6 +18,8 @@ function isEditableTarget(t: EventTarget | null): boolean {
 export function useShortcuts() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Sketch oturumunda klavye sketch arayüzüne aittir
+      if (useAssembly.getState().modeling.sketch) return;
       if (e.defaultPrevented || e.isComposing) return;
       if (isEditableTarget(e.target) || isEditableTarget(document.activeElement)) return;
 

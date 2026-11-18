@@ -9,6 +9,8 @@ import { Lights } from './Lights';
 import { SceneContent } from './SceneContent';
 import { SceneGrid } from './SceneGrid';
 import { gizmoBusy } from './sceneRefs';
+import { SketchLayer } from '../sketch/SketchLayer';
+import { PickLayer } from '../modeling/PickLayer';
 
 const BACKGROUND = '#1e2228';
 
@@ -39,6 +41,8 @@ export function Viewport() {
       <FaceHighlights />
       <MateCursor />
       <Gizmo />
+      <SketchLayer />
+      <PickLayer />
       <CameraRig />
       <OrbitControls makeDefault />
       <GizmoHelper alignment="bottom-right" margin={[72, 72]}>

@@ -7,11 +7,13 @@ import { Viewport } from './components/viewport/Viewport';
 import { useShortcuts } from './hooks/useShortcuts';
 import { restoreSession } from './lib/session';
 import { useAssembly } from './store/useAssembly';
+import { startBodyManager } from './modeling/bodyManager';
 
 export function App() {
   useShortcuts();
 
   useEffect(() => {
+    startBodyManager();
     restoreSession().catch((err: unknown) => {
       console.error(err);
       useAssembly.getState().showToast('Kayıtlı proje yüklenemedi', 'error');

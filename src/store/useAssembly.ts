@@ -1,18 +1,49 @@
 import { create } from 'zustand';
 import { solveMates } from '../lib/mateSolver';
 import { cleanupGroups } from '../lib/rigid';
-import type { Doc, ExtraSel, FaceRef, FileStatus, Job, MateStatus, ObjKind, Quat, Selection, UiState, Vec3 } from '../types';
+import type {
+  BodyBuildStatus,
+  Doc,
+  ExtraSel,
+  FaceRef,
+  FileStatus,
+  Job,
+  MateStatus,
+  ModelingState,
+  ObjKind,
+  PickRequest,
+  PickTarget,
+  Quat,
+  Selection,
+  UiState,
+  Vec3,
+} from '../types';
 
 const HISTORY_LIMIT = 100;
 const MERGE_WINDOW_MS = 800;
 
-export const emptyDoc = (): Doc => ({ files: [], instances: [], parts: [], mates: [], groups: [] });
+export const emptyDoc = (): Doc => ({ files: [], instances: [], parts: [], mates: [], groups: [], bodies: [] });
 
 /** Eski kayıtları güncel şemaya tamamlar */
 export const normalizeDoc = (doc: Doc): Doc =>
-  Array.isArray(doc.mates) && Array.isArray(doc.groups)
+  Array.isArray(doc.mates) && Array.isArray(doc.groups) && Array.isArray(doc.bodies)
     ? doc
-    : { ...doc, mates: Array.isArray(doc.mates) ? doc.mates : [], groups: Array.isArray(doc.groups) ? doc.groups : [] };
+    : {
+        ...doc,
+        mates: Array.isArray(doc.mates) ? doc.mates : [],
+        groups: Array.isArray(doc.groups) ? doc.groups : [],
+        bodies: Array.isArray(doc.bodies) ? doc.bodies : [],
+      };
+
+/** Instance'ı kalmayan gövdeleri atar (gövdenin son örneği silinince gövde de gider; geri alınabilir) */
+function pruneBodies(doc: Doc): Doc {
+  if (!doc.bodies.length) return doc;
+  const used = new Set(doc.instances.map((i) => i.fileId));
+  const kept = doc.bodies.filter((b) => used.has(`body:${b.id}`));
+  return kept.length === doc.bodies.length ? doc : { ...doc, bodies: kept };
+}
+
+const emptyModeling = (): ModelingState => ({ activeBodyId: null, sketch: null, feature: null, pick: null, build: {} });
 
 export interface AssemblyState {
   doc: Doc;
@@ -38,6 +69,8 @@ export interface AssemblyState {
   hoverFace: FaceRef | null;
   /** mateId → çözüm durumu (kaydedilmez, her çözümde yenilenir) */
   mateStatus: Record<string, MateStatus>;
+  /** Parametrik modelleme oturumu (kaydedilmez) */
+  modeling: ModelingState;
 
   setUi(p: Partial<UiState>): void;
   /** Nesne seçer; mate seçimini ve ek seçimleri temizler */
@@ -78,6 +111,22 @@ export interface AssemblyState {
   updateJob(id: string, p: Partial<Job>): void;
   removeJob(id: string): void;
   showToast(text: string, kind?: 'info' | 'error'): void;
+
+  /**
+   * Belgeyi geçmişe yazmadan değiştirir ve mate'leri yeniden çözer; seçim korunur.
+   * Yalnız türetilmiş veriyi düzeltmek için (ör. gövde yeniden üretiminden sonra yüz indeksleri).
+   */
+  replaceDocKeepHistory(doc: Doc): void;
+  /** Modelleme durumunu kısmen günceller (geçmişe yazılmaz) */
+  setModeling(p: Partial<ModelingState>): void;
+  setBuildStatus(bodyId: string, s: BodyBuildStatus | null): void;
+  /** Sahneden seçim ister (önceki istek iptal olur) */
+  startPick(req: Omit<PickRequest, 'picked'> & { picked?: PickTarget[] }): void;
+  /** Sahne bir hedef seçince çağırır: multi ise ekler/çıkarır (aynı hedef ikinci kez → çıkar), değilse yerine koyar */
+  addPicked(t: PickTarget): void;
+  /** picked listesini dışarıdan değiştirir (panelde tek tek silme) */
+  setPicked(list: PickTarget[]): void;
+  endPick(): void;
 }
 
 let dragSnapshot: Doc | null = null;
@@ -137,6 +186,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   pendingFace: null,
   hoverFace: null,
   mateStatus: {},
+  modeling: emptyModeling(),
   ui: {
     mode: 'translate',
     space: 'world',
@@ -174,7 +224,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const prev = get().doc;
     const raw = fn(prev);
     if (raw === prev) return;
-    const changed = cleanupGroups(prev, raw);
+    const changed = pruneBodies(cleanupGroups(prev, raw));
     const { doc: next, mateStatus } = solve(prev, changed);
     const now = Date.now();
     const merge = !!mergeKey && lastMerge?.key === mergeKey && now - lastMerge.time < MERGE_WINDOW_MS;
@@ -207,6 +257,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
       fileStatus: {},
       // Kayıtlı dönüşümler zaten çözülmüş; durumlar dosyalar yüklendikçe ilk commit'te güncellenir
       mateStatus: {},
+      modeling: emptyModeling(),
     });
   },
 
@@ -280,4 +331,39 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   updateJob: (id, p) => set((s) => ({ jobs: s.jobs.map((j) => (j.id === id ? { ...j, ...p } : j)) })),
   removeJob: (id) => set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) })),
   showToast: (text, kind = 'info') => set({ toast: { id: ++toastSeq, text, kind } }),
+
+  replaceDocKeepHistory: (doc) =>
+    set((s) => {
+      const { doc: next, mateStatus } = solve(s.doc, doc);
+      return { doc: next, mateStatus };
+    }),
+  setModeling: (p) => set((s) => ({ modeling: { ...s.modeling, ...p } })),
+  setBuildStatus: (bodyId, b) =>
+    set((s) => {
+      const build = { ...s.modeling.build };
+      if (b) build[bodyId] = b;
+      else delete build[bodyId];
+      return { modeling: { ...s.modeling, build } };
+    }),
+  startPick: (req) =>
+    set((s) => ({ modeling: { ...s.modeling, pick: { ...req, picked: req.picked ?? [] } }, hoverFace: null })),
+  addPicked: (t) =>
+    set((s) => {
+      const pick = s.modeling.pick;
+      if (!pick) return {};
+      const same = (a: PickTarget, b: PickTarget) =>
+        a.kind === 'face' && b.kind === 'face'
+          ? a.ref.partId === b.ref.partId && a.ref.meshIndex === b.ref.meshIndex && a.ref.faceIndex === b.ref.faceIndex
+          : a.kind === 'edge' && b.kind === 'edge'
+            ? a.partId === b.partId && a.edgeIndex === b.edgeIndex
+            : false;
+      let picked: PickTarget[];
+      if (pick.multi) {
+        picked = pick.picked.some((x) => same(x, t)) ? pick.picked.filter((x) => !same(x, t)) : [...pick.picked, t];
+      } else picked = [t];
+      return { modeling: { ...s.modeling, pick: { ...pick, picked } } };
+    }),
+  setPicked: (list) =>
+    set((s) => (s.modeling.pick ? { modeling: { ...s.modeling, pick: { ...s.modeling.pick, picked: list } } } : {})),
+  endPick: () => set((s) => ({ modeling: { ...s.modeling, pick: null }, hoverFace: null })),
 }));

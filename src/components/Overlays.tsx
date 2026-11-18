@@ -8,6 +8,8 @@ import { useAssembly } from '../store/useAssembly';
 import { importWithConfirm } from './importWithConfirm';
 import { IconClose, IconMate, IconPlus, IconUpload } from './icons';
 import { AddFilesButton } from './Toolbar';
+import { SketchToolbar } from './sketch/SketchToolbar';
+import { PickHint } from './modeling/PickHint';
 
 export function Overlays() {
   return (
@@ -15,6 +17,8 @@ export function Overlays() {
       <EmptyState />
       <JobList />
       <MateHint />
+      <SketchToolbar />
+      <PickHint />
       <Toast />
       <DropLayer />
     </div>

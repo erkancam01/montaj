@@ -55,7 +55,12 @@ export interface Doc {
   mates: Mate[];
   /** Rijit gruplar. Eski kayıtlarda olmayabilir; store.replaceDoc boş diziyle tamamlar. */
   groups: Group[];
+  /** Uygulamada çizilen parametrik gövdeler. Eski kayıtlarda olmayabilir; replaceDoc boş diziyle tamamlar. */
+  bodies: Body[];
 }
+
+import type { Body } from './modeling/types';
+export * from './modeling/types';
 
 // ---------------------------------------------------------------- Rijit gruplar
 
@@ -86,6 +91,12 @@ export interface FaceRef {
   partId: string;
   meshIndex: number;
   faceIndex: number;
+  /**
+   * Parametrik gövde yüzeylerinde: yüzeyin parça-yerel geometrisi (oluşturma anındaki).
+   * Gövde yeniden üretilince indeksler değişebilir; bodyManager bu imzayla en uygun yüzü bulup
+   * meshIndex/faceIndex'i günceller.
+   */
+  sig?: FaceGeom;
 }
 
 /**

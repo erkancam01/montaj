@@ -10,6 +10,7 @@ import { useAssembly } from '../store/useAssembly';
 import { selectedGroupId } from './GroupList';
 import { importWithConfirm, isDocEmpty } from './importWithConfirm';
 import { IconFit, IconGroup, IconMate, IconPlus, IconRedo, IconUndo, IconUngroup } from './icons';
+import { ModelingToolbar } from './modeling/ModelingToolbar';
 
 const MOVE_STEPS = [0.1, 0.5, 1, 5, 10, 50, 100];
 const ANGLE_STEPS = [1, 5, 15, 30, 45, 90];
@@ -325,6 +326,7 @@ export function Toolbar() {
           {busy === 'png' ? 'PNG…' : 'PNG'}
         </button>
       </div>
+      <ModelingToolbar />
     </header>
   );
 }

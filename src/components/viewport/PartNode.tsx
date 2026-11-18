@@ -4,6 +4,8 @@ import { Color, DoubleSide, LineBasicMaterial, MeshStandardMaterial, SRGBColorSp
 import { faceAtTriangle } from '../../lib/faceGeometry';
 import { geometryCache, getEdges, type ParsedMesh } from '../../lib/geometryCache';
 import { clickPart, pickFace } from '../../store/actions';
+import { withFaceSig } from '../../modeling/bodyManager';
+import { pickableFace } from '../../modeling/pick';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { FaceRef, Part } from '../../types';
 import { gizmoBusy, noRaycast } from './sceneRefs';
@@ -118,7 +120,8 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
   const highlighted = useAssembly((s) => isHighlighted(s, partId, instanceId));
   const showEdges = useAssembly((s) => s.ui.showEdges);
   // Hover işleyicileri yalnızca mate aracında bağlanır: aksi hâlde R3F her fare hareketinde raycast yapardı
-  const mateTool = useAssembly((s) => s.ui.tool === 'mate');
+  // Yüzey hover'ı: mate aracında ya da modelleme yüzey seçim isteğinde
+  const mateTool = useAssembly((s) => s.ui.tool === 'mate' || !!s.modeling.pick?.kinds.includes('face'));
 
   const materials = useMemo(() => (meshes ?? []).map((m) => makeMaterial(m, color)), [meshes, color]);
   useEffect(() => () => materials.forEach((m) => m.dispose()), [materials]);
@@ -141,6 +144,17 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
       e.stopPropagation();
       if (gizmoBusy()) return;
       const st = useAssembly.getState();
+      // Sketch oturumunda tıklamalar sketch katmanına aittir
+      if (st.modeling.sketch) return;
+      const pick = st.modeling.pick;
+      if (pick) {
+        // Modelleme seçim isteği: yalnız uygun yüzeyler seçilir; parça seçilmez
+        if (pick.kinds.includes('face')) {
+          const ref = faceRefOf(e, meshes);
+          if (ref && pickableFace(pick, ref)) st.addPicked({ kind: 'face', ref: withFaceSig(ref) });
+        }
+        return;
+      }
       if (st.ui.tool === 'mate') {
         // Mate aracında parça seçilmez; yüzey tanınmazsa tıklama etkisiz
         const ref = faceRefOf(e, meshes);
@@ -158,7 +172,7 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
     (e: ThreeEvent<PointerEvent>) => {
       e.stopPropagation(); // yalnızca en öndeki yüzey
       const st = useAssembly.getState();
-      if (st.ui.tool !== 'mate') return;
+      if (st.ui.tool !== 'mate' && !st.modeling.pick?.kinds.includes('face')) return;
       const ref = faceRefOf(e, meshes);
       if (!sameFace(ref, st.hoverFace)) st.setHoverFace(ref);
     },

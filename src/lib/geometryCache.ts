@@ -14,6 +14,11 @@ export interface ParsedMesh {
    * Üçgen t'nin köşeleri: index[3t..3t+2] (index yoksa 3t..3t+2).
    */
   faces: { first: number; last: number }[];
+  /**
+   * Yalnız parametrik gövdelerde: B-rep kenarları (radyus/pah kenar seçimi ve kenar çizimi için).
+   * position: çizgi parçaları (LineSegments; her parça 2 köşe, 6 float). ranges: kenar başına parça aralığı (dahil).
+   */
+  brepEdges?: { position: Float32Array; ranges: { first: number; last: number }[]; sigs: import('../modeling/types').EdgeSig[] };
   /** getEdges() ile tembel üretilir */
   edges?: BufferGeometry;
 }

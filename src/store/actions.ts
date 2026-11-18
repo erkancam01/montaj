@@ -1,5 +1,6 @@
 // Belge üzerinde geri alınabilir işlemler. Arayüz ve kısayollar bunları çağırır.
 import { getFaceGeom } from '../lib/faceGeometry';
+import { withFaceSig } from '../modeling/bodyManager';
 import { geometryCache } from '../lib/geometryCache';
 import { FACE_KIND_LABELS, MATE_LABELS, mateCompatible, suggestMateType } from '../lib/mateMeta';
 import { initialMateParams } from '../lib/mateSolver';
@@ -275,7 +276,7 @@ export function pickFace(ref: FaceRef) {
     return;
   }
   setPendingFace(null);
-  addMate(pendingFace, ref);
+  addMate(withFaceSig(pendingFace), withFaceSig(ref));
 }
 
 /** Yeni mate kurar (tip verilmezse yüzeylere göre önerilir), seçer ve çözer */

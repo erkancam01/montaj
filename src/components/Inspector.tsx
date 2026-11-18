@@ -9,6 +9,8 @@ import type { ObjKind, Transform, Vec3 } from '../types';
 import { GroupInspector, MultiSelectionProps } from './GroupInspector';
 import { groupByPart, groupColor } from './GroupList';
 import { MateInspector } from './MateInspector';
+import { FeatureInspector } from './modeling/FeatureInspector';
+import { SketchInspector } from './sketch/SketchInspector';
 
 /** Dönüşümü doğrudan saklanan tek nesne seçimi (instance ya da parça) */
 type ObjSel = { kind: ObjKind; id: string };
@@ -168,13 +170,19 @@ export function Inspector() {
   const selection = useAssembly((s) => s.selection);
   const multi = useAssembly((s) => s.extraSel.length > 0);
   const mateSelection = useAssembly((s) => s.mateSelection);
+  const sketchOpen = useAssembly((s) => !!s.modeling.sketch);
+  const featureOpen = useAssembly((s) => !!s.modeling.feature);
   return (
     <aside className="panel inspector-panel">
       <header className="panel-header">
         <span>Özellikler</span>
       </header>
       <div className="panel-body inspector">
-        {mateSelection ? (
+        {sketchOpen ? (
+          <SketchInspector />
+        ) : featureOpen ? (
+          <FeatureInspector />
+        ) : mateSelection ? (
           <MateInspector key={mateSelection} id={mateSelection} />
         ) : selection && multi ? (
           // Ek seçim varken birincil grup olsa bile çoklu panel
