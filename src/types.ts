@@ -97,6 +97,8 @@ export interface FaceRef {
    * meshIndex/faceIndex'i günceller.
    */
   sig?: FaceGeom;
+  /** sig ile birlikte: yüzey alanı (mm²); benzer yönlü yüzler arasında doğru olanı seçmek için */
+  sigArea?: number;
 }
 
 /**

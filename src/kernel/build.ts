@@ -201,18 +201,30 @@ export function matchEdges(shape: Shape3D, sigs: EdgeSig[]): { edges: Edge[]; mi
   const tol = Math.max(1e-4, diag * 1e-5);
   const loose = Math.max(tol * 10, diag * 0.05);
   const picked = new Set<number>();
-  let missing = 0;
-  for (const s of sigs) {
+  const findBest = (s: EdgeSig, lim: number) => {
     let best = -1;
     let bestScore = Infinity;
     cand.forEach((c, i) => {
       if (picked.has(i)) return;
-      const sc = sigScore(s, c, tol, loose);
+      const sc = sigScore(s, c, tol, lim);
       if (sc < bestScore) {
         bestScore = sc;
         best = i;
       }
     });
+    return best;
+  };
+  // 1. geçiş: sıkı eşleşme. 2. geçiş (kalanlar): parametrik değişikliğe dayanıklı geniş arama
+  // (ör. yüksekliği değişen gövdenin üst kenarları) — tür ve yön yine aynı olmalı.
+  const rest: EdgeSig[] = [];
+  for (const s of sigs) {
+    const best = findBest(s, loose);
+    if (best < 0) rest.push(s);
+    else picked.add(best);
+  }
+  let missing = 0;
+  for (const s of rest) {
+    const best = findBest(s, Math.max(loose, diag * 0.5));
     if (best < 0) missing++;
     else picked.add(best);
   }
@@ -367,19 +379,39 @@ function doFilletChamfer(st: State, ft: FilletFeature | ChamferFeature): string 
   if (!(value > 0)) throw new FeatureError(ft.type === 'fillet' ? 'Yarıçap sıfırdan büyük olmalı' : 'Mesafe sıfırdan büyük olmalı');
   const { edges, missing } = matchEdges(st.shape, ft.edges);
   if (!edges.length) throw new FeatureError('Seçilen kenarlar bulunamadı');
-  const set = new Set(edges.map((e) => e.hashCode));
-  const pick = (e: Edge) => (set.has(e.hashCode) && edges.some((x) => x.isSame(e)) ? value : null);
-  let r: Shape3D;
-  try {
-    r = ft.type === 'fillet' ? st.shape.fillet(pick) : st.shape.chamfer(pick);
-  } catch (e) {
+  const base = st.shape;
+  const apply = (list: Edge[]): Shape3D | null => {
+    const set = new Set(list.map((e) => e.hashCode));
+    const pick = (e: Edge) => (set.has(e.hashCode) && list.some((x) => x.isSame(e)) ? value : null);
+    try {
+      const out = ft.type === 'fillet' ? base.fillet(pick) : base.chamfer(pick);
+      return solidCount(out) ? out : null;
+    } catch {
+      return null;
+    }
+  };
+  let used = edges;
+  let r = apply(edges);
+  if (!r && edges.length > 1) {
+    // Bazı kenarlar uygulanamıyor olabilir (ör. silindir dikiş kenarı): tek tek dene, uygulananlarla tekrar
+    const ok = edges.filter((e) => apply([e]) !== null);
+    if (ok.length) {
+      r = apply(ok);
+      used = ok;
+    }
+  }
+  if (!r) {
     throw new FeatureError(
-      errText(e, ft.type === 'fillet' ? 'Radyus uygulanamadı (yarıçap çok büyük olabilir)' : 'Pah uygulanamadı (mesafe çok büyük olabilir)'),
+      ft.type === 'fillet' ? 'Radyus uygulanamadı (yarıçap çok büyük olabilir)' : 'Pah uygulanamadı (mesafe çok büyük olabilir)',
     );
   }
-  if (!solidCount(r)) throw new FeatureError(ft.type === 'fillet' ? 'Radyus uygulanamadı' : 'Pah uygulanamadı');
   st.shape = r;
-  return missing ? `Uyarı: ${missing} kenar bulunamadı, ${edges.length} kenara uygulandı` : null;
+  const skipped = edges.length - used.length;
+  if (missing || skipped) {
+    const parts = [missing ? `${missing} kenar bulunamadı` : '', skipped ? `${skipped} kenara uygulanamadı` : ''].filter(Boolean);
+    return `Uyarı: ${parts.join(', ')}; ${used.length} kenara uygulandı`;
+  }
+  return null;
 }
 
 function doHole(st: State, ft: HoleFeature) {

@@ -141,6 +141,8 @@ interface PartMeshesProps {
 
 /** Yalnızca ilkel prop'lar alır: sürükleme sırasında (dönüşüm değişince) yeniden render olmaz */
 const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKey, color }: PartMeshesProps) {
+  // Geometri yeniden üretilince (parametrik gövde) dosya durumu nesnesi yenilenir → yeniden oku
+  useAssembly((s) => s.fileStatus[fileId]);
   const meshes = geometryCache.get(fileId)?.nodes[nodeKey]?.meshes;
   // Boolean seçici: yalnızca bu parçanın seçili/değil durumu değişince render olur
   const highlighted = useAssembly((s) => isHighlighted(s, partId, instanceId));
