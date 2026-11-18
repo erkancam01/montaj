@@ -1,10 +1,21 @@
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
-import { Color, DoubleSide, LineBasicMaterial, MeshStandardMaterial, SRGBColorSpace, type Group } from 'three';
+import {
+  BufferAttribute,
+  BufferGeometry,
+  Color,
+  DoubleSide,
+  LineBasicMaterial,
+  MeshStandardMaterial,
+  SRGBColorSpace,
+  type Group,
+} from 'three';
 import { faceAtTriangle } from '../../lib/faceGeometry';
 import { geometryCache, getEdges, type ParsedMesh } from '../../lib/geometryCache';
 import { clickPart, pickFace } from '../../store/actions';
 import { withFaceSig } from '../../modeling/bodyManager';
+import { enterBody } from '../../modeling/actions';
+import { bodyIdOfFile, isBodyFileId } from '../../types';
 import { pickableFace } from '../../modeling/pick';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { FaceRef, Part } from '../../types';
@@ -18,6 +29,21 @@ const HIGHLIGHT_INTENSITY = 0.45;
 
 /** Tüm kenar çizgileri tek materyali paylaşır (dispose edilmez) */
 const EDGE_MATERIAL = new LineBasicMaterial({ color: '#14171c' });
+
+/**
+ * Kenar çizgileri: parametrik gövdelerde B-rep kenarları (çekirdekten), diğerlerinde açıdan türetilen kenarlar.
+ * B-rep kenar geometrisi mesh.edges'e yazılır (gövde yeniden üretilince bodyManager dispose eder).
+ */
+function edgeGeometry(m: ParsedMesh): BufferGeometry {
+  if (!m.brepEdges || !m.brepEdges.position.length) return getEdges(m);
+  if (!m.edges) {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(m.brepEdges.position, 3));
+    g.computeBoundingSphere();
+    m.edges = g;
+  }
+  return m.edges;
+}
 
 /** Parça mesh'lerinin userData'sı: tıklanan üçgenden FaceRef çıkarmak için */
 interface MeshIdentity {
@@ -189,6 +215,20 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
     [partId],
   );
 
+  // Gövde parçasına çift tık: parça düzenleme moduna gir
+  const onDoubleClick = useCallback(
+    (e: ThreeEvent<MouseEvent>) => {
+      if (!isBodyFileId(fileId)) return;
+      e.stopPropagation();
+      if (gizmoBusy()) return;
+      const m = useAssembly.getState().modeling;
+      const bodyId = bodyIdOfFile(fileId);
+      if (m.sketch || m.feature || m.pick || m.activeBodyId === bodyId) return;
+      enterBody(bodyId);
+    },
+    [fileId],
+  );
+
   // Parça gizlenir/silinirse üstündeki hover'ı bırak
   useEffect(
     () => () => {
@@ -208,11 +248,12 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
             material={materials[i]}
             userData={identities[i]}
             onClick={onClick}
+            onDoubleClick={isBodyFileId(fileId) ? onDoubleClick : undefined}
             onPointerMove={mateTool ? onPointerMove : undefined}
             onPointerOut={mateTool ? onPointerOut : undefined}
             dispose={null}
           />
-          {showEdges && <lineSegments geometry={getEdges(m)} material={EDGE_MATERIAL} raycast={noRaycast} dispose={null} />}
+          {showEdges && <lineSegments geometry={edgeGeometry(m)} material={EDGE_MATERIAL} raycast={noRaycast} dispose={null} />}
         </Fragment>
       ))}
     </>

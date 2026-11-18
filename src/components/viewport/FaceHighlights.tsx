@@ -4,6 +4,7 @@ import { DoubleSide, LessEqualDepth, Mesh, MeshBasicMaterial } from 'three';
 import { faceHighlightGeometry, getFaceGeom } from '../../lib/faceGeometry';
 import { geometryCache } from '../../lib/geometryCache';
 import { objectRegistry } from '../../lib/registry';
+import { pickableFace } from '../../modeling/pick';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { FaceGeom, FaceRef } from '../../types';
 import { noRaycast } from './sceneRefs';
@@ -14,6 +15,8 @@ const RED = '#e5484d';
 const HOVER_COLORS: Record<FaceGeom['kind'], string> = { plane: '#3ea6ff', cylinder: ORANGE, other: RED };
 
 const HOVER_OPACITY = 0.35;
+const PICK_BLUE = '#3ea6ff';
+const PICK_BAD_OPACITY = 0.18;
 const PENDING_OPACITY = 0.6;
 const MATE_OPACITY = 0.5;
 
@@ -37,6 +40,14 @@ function highlightKey(s: AssemblyState): string {
   };
 
   push(s.pendingFace, GREEN, PENDING_OPACITY);
+
+  // Modelleme yüzey seçim isteği: seçilenler yeşil, imleçteki uygunsa mavi, değilse soluk kırmızı
+  const pick = s.modeling.pick;
+  if (pick && pick.kinds.includes('face') && !s.modeling.sketch) {
+    for (const t of pick.picked) if (t.kind === 'face') push(t.ref, GREEN, PENDING_OPACITY);
+    const h = s.hoverFace;
+    if (h) push(h, pickableFace(pick, h) ? PICK_BLUE : RED, pickableFace(pick, h) ? HOVER_OPACITY : PICK_BAD_OPACITY);
+  }
 
   const hover = s.ui.tool === 'mate' ? s.hoverFace : null;
   if (hover) {
@@ -149,7 +160,9 @@ const FaceOverlay = memo(function FaceOverlay({ partId, meshIndex, faceIndex, co
 /** Mate aracında imleç bir yüzeyin üstündeyken artı imleci */
 export function MateCursor() {
   const el = useThree((s) => s.gl.domElement);
-  const active = useAssembly((s) => s.ui.tool === 'mate' && s.hoverFace !== null);
+  const active = useAssembly(
+    (s) => (s.ui.tool === 'mate' || !!s.modeling.pick?.kinds.includes('face')) && s.hoverFace !== null && !s.modeling.sketch,
+  );
   useEffect(() => {
     if (!active) return;
     el.style.cursor = 'crosshair';

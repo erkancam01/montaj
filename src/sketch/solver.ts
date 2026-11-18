@@ -1,5 +1,8 @@
-// STUB — sketch çözücü ajanı gerçekleyecek (planegcs). Dışa aktarılan imzalar sözleşmedir.
+// Sketch kısıt çözücü (planegcs = FreeCAD GCS, wasm). Dışa aktarılan imzalar sözleşmedir.
+// Asıl gerçekleme ./solver/core.ts içindedir (Node'da test edilebilsin diye wasm yolu enjekte edilir).
+import wasmUrl from '@salusoft89/planegcs/dist/planegcs_dist/planegcs.wasm?url';
 import type { SkConstraint, SkConstraintType, SkEntity } from '../types';
+import { LABELS, applicable, initWithPath, isReady, measure, solve } from './solver/core';
 
 export interface SketchSolveResult {
   /** Çözülmüş varlıklar (nokta konumları, yarıçaplar güncel). Çözülemezse giriş aynen döner. */
@@ -15,10 +18,12 @@ export interface SketchSolveResult {
 }
 
 /** planegcs wasm'ını yükler (bir kez). Diğer fonksiyonlar bundan sonra senkron çalışır. */
-export async function initSketchSolver(): Promise<void> {}
+export async function initSketchSolver(): Promise<void> {
+  await initWithPath(wasmUrl);
+}
 
 export function isSketchSolverReady(): boolean {
-  return false;
+  return isReady();
 }
 
 /**
@@ -30,17 +35,17 @@ export function solveSketch(
   constraints: SkConstraint[],
   _opts?: { drag?: { pointId: string; x: number; y: number } },
 ): SketchSolveResult {
-  return { entities, status: 'failed', dof: -1, conflicting: [], redundant: [] };
+  return solve(entities, constraints, _opts);
 }
 
 /** Seçili varlıklara uygulanabilecek ilişki/ölçü tipleri (araç çubuğu için) */
 export function applicableConstraints(_selected: SkEntity[]): SkConstraintType[] {
-  return [];
+  return applicable(_selected);
 }
 
 /** Ölçü kısıtı için mevcut geometriden ölçülen değer (yeni ölçü eklerken varsayılan) */
 export function measureConstraint(_type: SkConstraintType, _refs: string[], _entities: SkEntity[]): number | null {
-  return null;
+  return measure(_type, _refs, _entities);
 }
 
-export const CONSTRAINT_LABELS: Partial<Record<SkConstraintType, string>> = {};
+export const CONSTRAINT_LABELS: Partial<Record<SkConstraintType, string>> = LABELS;

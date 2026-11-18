@@ -1,7 +1,7 @@
 // Parametrik modelleme işlemleri (gövde, sketch ve özellik oturumları). Arayüz bunları çağırır.
 import { warmupKernel } from '../kernel/kernelApi';
 import { worldFaceGeom } from '../lib/faceGeometry';
-import { IDENTITY_QUAT, invertT, uid } from '../lib/math';
+import { IDENTITY_QUAT, invertT, partWorld, uid } from '../lib/math';
 import { useAssembly } from '../store/useAssembly';
 import type {
   Body,
@@ -87,10 +87,17 @@ function applyT(t: Transform, p: Vec3, isDir: boolean): Vec3 {
 }
 
 /** Dünya düzlemini gövde-yerel düzleme çevirir */
-export function worldPlaneToBody(bodyId: string, plane: PlaneDef): PlaneDef {
+/** Gövde çerçevesi (gövde-yerel → dünya) = parçanın dünya dönüşümü (instance ∘ part) */
+export function bodyFrame(bodyId: string): Transform | null {
   const inst = bodyInstance(bodyId);
-  if (!inst) return plane;
-  const inv = invertT(inst);
+  const part = bodyPart(bodyId);
+  return inst && part ? partWorld(inst, part) : null;
+}
+
+export function worldPlaneToBody(bodyId: string, plane: PlaneDef): PlaneDef {
+  const frame = bodyFrame(bodyId);
+  if (!frame) return plane;
+  const inv = invertT(frame);
   return {
     origin: applyT(inv, plane.origin, false),
     xDir: norm(applyT(inv, plane.xDir, true)),
@@ -100,12 +107,12 @@ export function worldPlaneToBody(bodyId: string, plane: PlaneDef): PlaneDef {
 
 /** Gövde-yerel düzlemi dünyaya çevirir (çizim kamerası ve sketch çizimi için) */
 export function bodyPlaneToWorld(bodyId: string, plane: PlaneDef): PlaneDef {
-  const inst = bodyInstance(bodyId);
-  if (!inst) return plane;
+  const frame = bodyFrame(bodyId);
+  if (!frame) return plane;
   return {
-    origin: applyT(inst, plane.origin, false),
-    xDir: norm(applyT(inst, plane.xDir, true)),
-    normal: norm(applyT(inst, plane.normal, true)),
+    origin: applyT(frame, plane.origin, false),
+    xDir: norm(applyT(frame, plane.xDir, true)),
+    normal: norm(applyT(frame, plane.normal, true)),
   };
 }
 
