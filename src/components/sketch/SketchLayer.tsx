@@ -68,12 +68,14 @@ function basisMatrix(p: WorldPlane): Matrix4 {
   return new Matrix4().makeBasis(p.x, p.y, p.n).setPosition(p.o);
 }
 
-/** Gövde instance'ının dönüşümü değişince yeniden hesaplamak için */
+/** Gövde çerçevesi (instance ∘ part) değişince yeniden hesaplamak için */
 function useInstanceKey(bodyId: string): string {
   return useAssembly((s) => {
     const fid = bodyFileId(bodyId);
     const i = s.doc.instances.find((x) => x.fileId === fid);
-    return i ? `${i.position.join(',')}|${i.quaternion.join(',')}` : '';
+    const p = s.doc.parts.find((x) => x.fileId === fid);
+    const t = (o?: { position: number[]; quaternion: number[] }) => (o ? `${o.position.join(',')}|${o.quaternion.join(',')}` : '');
+    return `${t(i)}/${t(p)}`;
   });
 }
 
@@ -168,7 +170,8 @@ function ActiveSketch() {
     [bodyId, plane, instKey],
   );
   const matrix = useMemo(() => (wp ? basisMatrix(wp) : new Matrix4()), [wp]);
-  const { camera, gl } = useThree();
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
   const controls = useThree((s) => s.controls);
   const anim = useRef<CamAnim | null>(null);
   const aligned = useRef(false);

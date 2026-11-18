@@ -817,10 +817,14 @@ export function onPointerDown(e: PointerEvent) {
     return;
   }
   if (e.button !== 0) return;
+  // Açık giriş alanı varsa değerini işlesin (blur); varsayılan odak değişimi engellenir ki
+  // bu tıkla açılan ölçü kutusu hemen kapanmasın
+  const ae = document.activeElement;
+  if (ae instanceof HTMLElement && ae !== document.body && !ae.closest('.sk-typed')) ae.blur();
+  e.preventDefault();
   const raw = clientToSketch(e.clientX, e.clientY);
   if (!raw) return;
   ctl.lastRaw = raw;
-  // Odak giriş kutusundaysa tık onu kapatmasın diye önce değer işlenir
   const tool = ui().tool;
   if (tool === 'select') {
     (e.target as Element | null)?.setPointerCapture?.(e.pointerId);

@@ -274,6 +274,8 @@ export interface ApplyOpts {
   noSolve?: boolean;
   /** Başarısızlık uyarısı */
   failMessage?: string;
+  /** Çözüm başarısız olsa da uygula (silme işlemleri: çelişki giderilebilsin) */
+  allowFail?: boolean;
 }
 
 /**
@@ -289,7 +291,12 @@ export function applySketch(fn: (d: SketchFeature) => SketchFeature, opts: Apply
   if (!opts.noSolve) {
     const r = safeSolve(next, opts.drag);
     if (r) {
-      if (r.status !== 'ok') {
+      // Taslak zaten çözülemiyorsa (ör. çelişkili yüklendi) değişiklikler engellenmez; yoksa kullanıcı takılır
+      const wasBad = ui().status.known && !ui().status.ok;
+      if (r.status !== 'ok' && (opts.allowFail || (wasBad && !opts.drag))) {
+        setStatus(r);
+        data = next;
+      } else if (r.status !== 'ok') {
         if (!opts.silent) {
           const names = (r.conflicting ?? [])
             .map((id) => next.constraints.find((c) => c.id === id))
@@ -301,9 +308,10 @@ export function applySketch(fn: (d: SketchFeature) => SketchFeature, opts: Apply
             .showToast(`${opts.failMessage ?? 'Kısıtlar çözülemedi; son değişiklik geri alındı.'}${extra}`, 'error');
         }
         return false;
+      } else {
+        data = { ...next, entities: r.entities };
+        setStatus(r);
       }
-      data = { ...next, entities: r.entities };
-      setStatus(r);
     } else {
       data = normalizeWithoutSolver(next);
     }
@@ -553,7 +561,7 @@ export function toggleConstruction(ids: string[]): boolean {
 export function deleteSelection() {
   const sel = ui().sel;
   if (!sel.length) return;
-  applySketch((d) => removeItems(d, sel));
+  applySketch((d) => removeItems(d, sel), { allowFail: true });
   setUi({ sel: [], hover: null });
 }
 
