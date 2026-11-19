@@ -24,7 +24,7 @@ import { beginSession, endSession, isDimension, useSketchUi } from '../../sketch
 import { useAssembly } from '../../store/useAssembly';
 import { dimGeometry } from './annotations';
 import { boundsOf, curvePolyline, isCurve, pointMap, TAU, type PtMap } from './geom';
-import { onKeyDown, onPointerDown, onPointerLeave, onPointerMove, onPointerUp, resetController, useDraw } from './tools';
+import { onKeyDown, onPointerCancel, onPointerDown, onPointerLeave, onPointerMove, onPointerUp, resetController, useDraw } from './tools';
 import { pxSize, updateLabels, view, worldToSketch, type WorldPlane } from './view';
 import { lookAtPlane } from '../../lib/viewCommands';
 
@@ -214,6 +214,7 @@ function ActiveSketch() {
     el.addEventListener('pointermove', onPointerMove);
     el.addEventListener('pointerup', onPointerUp);
     el.addEventListener('pointerleave', onPointerLeave);
+    el.addEventListener('pointercancel', onPointerCancel);
     el.addEventListener('contextmenu', ctx);
     window.addEventListener('keydown', onKeyDown);
     return () => {
@@ -221,6 +222,7 @@ function ActiveSketch() {
       el.removeEventListener('pointermove', onPointerMove);
       el.removeEventListener('pointerup', onPointerUp);
       el.removeEventListener('pointerleave', onPointerLeave);
+      el.removeEventListener('pointercancel', onPointerCancel);
       el.removeEventListener('contextmenu', ctx);
       window.removeEventListener('keydown', onKeyDown);
     };

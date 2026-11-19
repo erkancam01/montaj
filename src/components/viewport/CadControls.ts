@@ -1,6 +1,10 @@
 // SolidWorks 2022 tarzı kamera kontrolcüsü (OrbitControls yerine).
 // Orta tuş: döndür · Ctrl+orta: kaydır · Shift+orta: yakınlaştır · tekerlek: imlecin altına yakınlaştır ·
 // orta çift tık: o noktaya odakla. Sol ve sağ tuş kamerayı hiç oynatmaz.
+// Dokunmatik (pointerType 'touch'): tek parmak döndür (parmağın altındaki nokta etrafında), iki parmak
+// kaydır + çimdik yakınlaştır (iki parmağın ortası etrafında), çift dokunma (tek ya da iki parmak) =
+// o noktaya odakla / boşlukta tümüne sığdır, uzun basma = sağ tık (sentetik contextmenu).
+// Sketch oturumunda tek parmak sketch aracına aittir (yalnız iki parmak kamerayı oynatır).
 // Döndürme serbesttir (ekran eksenleri etrafında); kameranın "yukarı"sı dönüşle birlikte değişir.
 import {
   EventDispatcher,
@@ -16,6 +20,8 @@ import {
 } from 'three';
 import { useAssembly } from '../../store/useAssembly';
 import { gizmoBusy, sceneRefs } from './sceneRefs';
+import { fireLongPress, hapticTick, LONG_PRESS_MS, TAP_PX } from '../../hooks/useLongPress';
+import { markMultiTouch } from './touchState';
 
 /** Kamera duruşu: hedef + yönelim + hedefe uzaklık (kamera hedefe −Z yönünde bakar) */
 export interface ViewPose {
@@ -41,6 +47,43 @@ interface MiddleDrag {
   /** Döndürme merkezi / kaydırma-yakınlaştırma referans noktası (imlecin altındaki model noktası) */
   pivot: Vector3 | null;
 }
+
+interface TouchPt {
+  x: number;
+  y: number;
+}
+
+/** Tek parmak hareketi */
+interface OneTouch {
+  id: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  t0: number;
+  moved: boolean;
+  /** Sketch oturumu: tek parmak kameraya ait değil */
+  passive: boolean;
+  pivot: Vector3 | null;
+  timer: number;
+  longFired: boolean;
+}
+
+/** İki parmak hareketi */
+interface TwoTouch {
+  a: number;
+  b: number;
+  lastMid: TouchPt;
+  lastDist: number;
+  startMid: TouchPt;
+  startDist: number;
+  t0: number;
+  moved: boolean;
+  ref: Vector3 | null;
+}
+
+const TOUCH_DBL_MS = 350;
+const TOUCH_DBL_PX = 30;
 
 const ROTATE_SPEED = 1.1 * Math.PI; // görünüm yüksekliği başına radyan
 const DRAG_ZOOM_SPEED = 0.006; // piksel başına
@@ -81,6 +124,16 @@ export class CadControls extends EventDispatcher<{ change: object }> {
   private lastMiddleUp = { t: 0, x: 0, y: 0 };
   private wheelHit: { t: number; x: number; y: number; p: Vector3 | null } | null = null;
   private readonly raycaster = new Raycaster();
+  // Dokunmatik
+  private readonly touches = new Map<number, TouchPt>();
+  private one: OneTouch | null = null;
+  private two: TwoTouch | null = null;
+  /** İki parmaklı hareketten sonra kalan parmak, tüm parmaklar kalkana kadar yok sayılır */
+  private touchIgnore = false;
+  private lastTap = { t: 0, x: 0, y: 0 };
+  private lastTwoTap = { t: 0, x: 0, y: 0 };
+  /** Tek parmak kameraya ait değil mi (sketch oturumu); dışarıdan değiştirilebilir */
+  oneFingerPassive: () => boolean = () => useAssembly.getState().modeling.sketch !== null;
 
   constructor(camera: PerspectiveCamera) {
     super();
@@ -105,6 +158,11 @@ export class CadControls extends EventDispatcher<{ change: object }> {
     dom.addEventListener('mousedown', this.onMouseDown);
     dom.addEventListener('auxclick', this.onAuxClick);
     dom.addEventListener('wheel', this.onWheel, { passive: false });
+    // Dokunmatik: tarayıcı kaydırma/yakınlaştırma yapmasın, iOS uzun basma balonu çıkmasın
+    dom.style.touchAction = 'none';
+    dom.style.setProperty('-webkit-touch-callout', 'none');
+    dom.style.setProperty('-webkit-user-select', 'none');
+    dom.style.userSelect = 'none';
   }
 
   disconnect() {
@@ -119,6 +177,7 @@ export class CadControls extends EventDispatcher<{ change: object }> {
     dom.removeEventListener('wheel', this.onWheel);
     this.dom = null;
     this.drag = null;
+    this.resetTouch();
   }
 
   dispose() {
@@ -343,6 +402,10 @@ export class CadControls extends EventDispatcher<{ change: object }> {
   };
 
   private readonly onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      this.touchDown(e);
+      return;
+    }
     if (e.button !== 1) return;
     e.preventDefault();
     if (!this.enabled || gizmoBusy()) return;
@@ -366,6 +429,10 @@ export class CadControls extends EventDispatcher<{ change: object }> {
   };
 
   private readonly onPointerMove = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      this.touchMove(e);
+      return;
+    }
     const d = this.drag;
     if (!d || e.pointerId !== d.pointerId) return;
     // Orta tuş bırakılmış ama pointerup kaçmışsa
@@ -392,6 +459,10 @@ export class CadControls extends EventDispatcher<{ change: object }> {
   };
 
   private readonly onPointerUp = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') {
+      this.touchUp(e);
+      return;
+    }
     const d = this.drag;
     if (!d || e.pointerId !== d.pointerId) return;
     if (e.type === 'pointerup' && e.button !== 1 && e.buttons & 4) return; // başka tuş bırakıldı
@@ -423,6 +494,191 @@ export class CadControls extends EventDispatcher<{ change: object }> {
       return;
     }
     this.lastMiddleUp = { t: now, x: e.clientX, y: e.clientY };
+  }
+
+  // ------------------------------------------------------------ Dokunmatik
+
+  private resetTouch() {
+    if (this.one) window.clearTimeout(this.one.timer);
+    this.touches.clear();
+    this.one = null;
+    this.two = null;
+    this.touchIgnore = false;
+    markMultiTouch(false);
+  }
+
+  private cancelOne() {
+    const o = this.one;
+    if (!o) return;
+    window.clearTimeout(o.timer);
+    this.one = null;
+  }
+
+  /** Gizmo ile etkileşim sürüyor */
+  private gizmoActive(): boolean {
+    if (gizmoBusy()) return true;
+    const tc = sceneRefs.gizmo as (Object3D & { dragging?: boolean }) | null;
+    return !!tc?.dragging;
+  }
+
+  /** Çift dokunma: noktaya odakla / boşlukta tümüne sığdır */
+  private focusAtScreen(x: number, y: number) {
+    if (!this.enabled) return;
+    const p = this.pick(x, y);
+    if (p) this.focusOn(p);
+    else this.onFocusMiss?.();
+  }
+
+  private startTwo(a: number, b: number): TwoTouch | null {
+    const pa = this.touches.get(a);
+    const pb = this.touches.get(b);
+    if (!pa || !pb) return null;
+    const mid = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+    const dist = Math.max(Math.hypot(pa.x - pb.x, pa.y - pb.y), 1);
+    const ref = this.pick(mid.x, mid.y);
+    if (ref) this.retarget(ref);
+    return { a, b, lastMid: mid, lastDist: dist, startMid: { ...mid }, startDist: dist, t0: performance.now(), moved: false, ref };
+  }
+
+  private touchDown(e: PointerEvent) {
+    // Parça sürüklemesi (DragController) ya da gizmo kamerayı devre dışı bıraktıysa bu parmak bizim değil
+    if (!this.enabled || this.gizmoActive()) return;
+    if (this.touches.size >= 2) return;
+    this.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try {
+      (e.target as Element | null)?.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* yakalama desteklenmiyor */
+    }
+    this.anim = null;
+    if (this.touches.size === 1) {
+      if (this.touchIgnore) return;
+      const passive = this.oneFingerPassive();
+      const o: OneTouch = {
+        id: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        lastX: e.clientX,
+        lastY: e.clientY,
+        t0: performance.now(),
+        moved: false,
+        passive,
+        pivot: null,
+        timer: 0,
+        longFired: false,
+      };
+      if (!passive) {
+        o.pivot = this.pick(e.clientX, e.clientY);
+        const target = e.target ?? this.dom;
+        o.timer = window.setTimeout(() => {
+          if (this.one !== o || o.moved || !target || this.gizmoActive()) return;
+          o.longFired = true;
+          hapticTick();
+          fireLongPress(target, o.startX, o.startY, o.id);
+        }, LONG_PRESS_MS);
+      }
+      this.one = o;
+      return;
+    }
+    // İkinci parmak: tek parmak hareketi biter, kaydır / çimdik başlar
+    this.cancelOne();
+    markMultiTouch(true);
+    this.touchIgnore = true;
+    const [a, b] = [...this.touches.keys()];
+    this.two = this.startTwo(a, b);
+  }
+
+  private touchMove(e: PointerEvent) {
+    const pt = this.touches.get(e.pointerId);
+    if (!pt) return;
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const t = this.two;
+    if (t && (e.pointerId === t.a || e.pointerId === t.b)) {
+      const pa = this.touches.get(t.a)!;
+      const pb = this.touches.get(t.b)!;
+      const mid = { x: (pa.x + pb.x) / 2, y: (pa.y + pb.y) / 2 };
+      const dist = Math.max(Math.hypot(pa.x - pb.x, pa.y - pb.y), 1);
+      if (!t.moved) {
+        const dm = Math.hypot(mid.x - t.startMid.x, mid.y - t.startMid.y);
+        if (dm < TAP_PX && Math.abs(dist - t.startDist) < TAP_PX) return;
+        t.moved = true;
+      }
+      const dx = mid.x - t.lastMid.x;
+      const dy = mid.y - t.lastMid.y;
+      const f = t.lastDist / dist;
+      t.lastMid = mid;
+      t.lastDist = dist;
+      if (!this.enabled || this.gizmoActive()) return;
+      if (dx || dy) this.pan(dx, dy, t.ref);
+      if (Math.abs(f - 1) > 1e-6) {
+        // Referans nokta (parmakların ortasının altındaki model noktası) kaydırmayla ortada kalır
+        const q = t.ref ?? this.cursorOnTargetPlane(mid.x, mid.y) ?? this.target.clone();
+        this.zoomAt(q, f);
+      }
+      return;
+    }
+    const o = this.one;
+    if (!o || e.pointerId !== o.id || o.passive || o.longFired) return;
+    const dx = e.clientX - o.lastX;
+    const dy = e.clientY - o.lastY;
+    o.lastX = e.clientX;
+    o.lastY = e.clientY;
+    if (!o.moved) {
+      if (Math.hypot(e.clientX - o.startX, e.clientY - o.startY) < TAP_PX) return;
+      o.moved = true;
+      window.clearTimeout(o.timer);
+      // Parmak gizmo tutamağına bastıysa (gizmo sürüklemesi başladı) kamera oynamaz
+      if (this.gizmoActive()) {
+        this.cancelOne();
+        this.touchIgnore = true;
+        return;
+      }
+      if (o.pivot) this.retarget(o.pivot);
+    }
+    if (!this.enabled || this.gizmoActive()) return;
+    if (dx || dy) this.rotate(dx, dy, o.pivot ?? this.target.clone());
+  }
+
+  private touchUp(e: PointerEvent) {
+    if (!this.touches.has(e.pointerId)) return;
+    this.touches.delete(e.pointerId);
+    try {
+      (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+    } catch {
+      /* yok say */
+    }
+    const now = performance.now();
+    const t = this.two;
+    if (t && (e.pointerId === t.a || e.pointerId === t.b)) {
+      this.two = null;
+      // İki parmakla çift dokunma: parmakların ortasına odakla
+      if (e.type === 'pointerup' && !t.moved && now - t.t0 < 300) {
+        const prev = this.lastTwoTap;
+        const m = t.lastMid;
+        if (now - prev.t < TOUCH_DBL_MS + 150 && Math.hypot(m.x - prev.x, m.y - prev.y) < TOUCH_DBL_PX * 2) {
+          this.lastTwoTap.t = 0;
+          this.focusAtScreen(m.x, m.y);
+        } else this.lastTwoTap = { t: now, x: m.x, y: m.y };
+      } else this.lastTwoTap.t = 0;
+    }
+    const o = this.one;
+    if (o && e.pointerId === o.id) {
+      window.clearTimeout(o.timer);
+      this.one = null;
+      if (e.type === 'pointerup' && !o.passive && !o.moved && !o.longFired && now - o.t0 < LONG_PRESS_MS) {
+        // Tek parmak çift dokunma: noktaya odakla / boşlukta sığdır (ilk dokunma yine seçim tıklamasıdır)
+        const prev = this.lastTap;
+        if (now - prev.t < TOUCH_DBL_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < TOUCH_DBL_PX) {
+          this.lastTap.t = 0;
+          this.focusAtScreen(e.clientX, e.clientY);
+        } else this.lastTap = { t: now, x: e.clientX, y: e.clientY };
+      } else this.lastTap.t = 0;
+    }
+    if (this.touches.size === 0) {
+      this.touchIgnore = false;
+      markMultiTouch(false);
+    }
   }
 
   private readonly onWheel = (e: WheelEvent) => {
