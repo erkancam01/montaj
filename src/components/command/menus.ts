@@ -1,6 +1,7 @@
 // Bağlama göre menü girdileri: sahne sağ tık (yüzey / parça / boş alan), ağaç sağ tık, bağlam kutusu ve S menüsü.
 import { isPartFixed, setPartFixed } from '../../lib/partStatus';
 import { viewerApi } from '../../lib/viewerApi';
+import { normalTo } from '../../lib/viewCommands';
 import { cancelFeature, enterBody, exitBody, finishSketch, bodyIdOfPart } from '../../modeling/actions';
 import { duplicate, remove, setVisible, groupSelection } from '../../store/actions';
 import { useAssembly } from '../../store/useAssembly';
@@ -47,6 +48,14 @@ export function contextBoxItems(hit: SceneHit): MenuItem[] {
       title: 'Bu yüzeyi referans alarak mate kur (sonra ikinci yüzeye tıklayın)',
       onClick: () => runCommand('mate', 'Mate', () => mateFromFace(face)),
     });
+    if (hit.planar) {
+      items.push({
+        label: "Normal'e bak",
+        icon: 'plane',
+        title: "Bu yüzeye dik bak (Ctrl+8)",
+        onClick: () => normalTo(face),
+      });
+    }
   }
   const bodyId = bodyIdOfPart(hit.partId);
   if (bodyId && s.modeling.activeBodyId !== bodyId) {
@@ -89,6 +98,9 @@ export function partMenu(hit: SceneHit): MenuEntry[] {
         onClick: () => runCommand('mate', 'Mate', () => mateFromFace(face)),
       },
     );
+    if (hit.planar) {
+      entries.push({ label: "Normal'e bak", icon: 'plane', hint: 'Ctrl+8', onClick: () => normalTo(face) });
+    }
   }
   if (bodyId) {
     entries.push(
