@@ -44,6 +44,9 @@ ilk girildiğinde arka planda yüklenir.
   "Yolun başına" yerleşimde profil otomatik yola dik konur; kapalı yolda (ör. FFB × FFH dikdörtgen) köşeleri
   gönyeli bir kasa çıkar (düz kenarlarda her kenar uzatılıp açıortaydan kesilir). Döndür 180° ile profil yolun
   içine alınır; "Sonucu birleştir" kapalıysa her çıta montajda ayrı parça olur.
+  **Yol ▸ Çerçeve** seçilirse yol çizilmez: **Genişlik × Yükseklik** (dış / iç / eksen ölçüsü) ve düzlem (Ön / Üst /
+  Sağ) yazılır, orijine ortalı gönyeli çerçeve oluşur. Gövdede profilden başka sketch yoksa Çerçeve kendiliğinden
+  seçilir (DXF profil → Süpür → ölçüleri yaz → ✓). Genişlik / Yükseklik Parametreler tablosunda da görünür.
 - Extrude/Revolve'da **Sonucu birleştir** kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur
   (birbirine değmeyen bölgeler de ayrı parça olur).
 - **Mate (M)**: önce yerinde kalacak referans yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın.

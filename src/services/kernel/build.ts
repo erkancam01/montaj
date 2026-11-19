@@ -22,6 +22,7 @@ import {
   type Wire,
 } from 'replicad';
 import { arcMid, findRegions, reverseLoop, selectRegions, type Loop, type Region, type Seg } from '@/core/sketch/profiles';
+import { BASE_PLANES } from '@/core/modeling/planes';
 import type {
   Body,
   BoolOp,
@@ -733,16 +734,60 @@ export function miterBars(
   return bars;
 }
 
+/** Profil bölgelerinin sınır noktaları (yay/daire örneklenmiş, sketch-2B) */
+function regionPoints(regions: Region[]): Vec2[] {
+  const out: Vec2[] = [];
+  const arcPts = (c: Vec2, r: number, a0: number, sw: number) => {
+    const n = Math.max(8, Math.ceil((Math.abs(sw) / (Math.PI * 2)) * 64));
+    for (let i = 0; i <= n; i++) out.push([c[0] + r * Math.cos(a0 + (sw * i) / n), c[1] + r * Math.sin(a0 + (sw * i) / n)]);
+  };
+  for (const rg of regions)
+    for (const sg of rg.outer.segs) {
+      if (sg.kind === 'line') out.push(sg.a, sg.b);
+      else if (sg.kind === 'circle') arcPts(sg.c, sg.r, 0, Math.PI * 2);
+      else {
+        const T = Math.PI * 2;
+        const sw = sg.ccw ? (((sg.a1 - sg.a0) % T) + T) % T || T : -((((sg.a0 - sg.a1) % T) + T) % T || T);
+        arcPts(sg.c, sg.r, sg.a0, sw);
+      }
+    }
+  return out;
+}
+
+/**
+ * Yol çizmeden çerçeve: framePlane üzerinde orijine ortalı, saat yönü tersine dikdörtgen (yolun sağı = dışarı).
+ * Ölçü dış / iç kenara göre verildiyse profilin çıta çerçevesindeki y uzanımıyla eksen dikdörtgenine çevrilir.
+ */
+function frameChain(ft: SweepFeature, regions: Region[], local: { o: Vec3; x: Vec3; y: Vec3 }): { kind: 'line'; a: Vec2; b: Vec2 }[] {
+  const W = ft.frameW ?? 0;
+  const H = ft.frameH ?? 0;
+  if (!(W > 0) || !(H > 0)) throw new FeatureError('Çerçeve genişliği ve yüksekliği sıfırdan büyük olmalı');
+  let yMin = Infinity;
+  let yMax = -Infinity;
+  for (const p of regionPoints(regions)) {
+    const y = local.o[1] + local.x[1] * p[0] + local.y[1] * p[1];
+    yMin = Math.min(yMin, y);
+    yMax = Math.max(yMax, y);
+  }
+  const ref = ft.frameRef ?? 'outer';
+  const off = ref === 'outer' ? 2 * yMax : ref === 'inner' ? 2 * yMin : 0;
+  const w = W - off;
+  const h = H - off;
+  if (!(w > 1e-6) || !(h > 1e-6)) throw new FeatureError('Çerçeve ölçüsü profile göre çok küçük');
+  const p: Vec2[] = [
+    [-w / 2, -h / 2],
+    [w / 2, -h / 2],
+    [w / 2, h / 2],
+    [-w / 2, h / 2],
+  ];
+  return p.map((a, i) => ({ kind: 'line', a, b: p[(i + 1) % 4] }));
+}
+
 function doSweep(st: State, ft: SweepFeature) {
   const prof = sketchOf(st, ft.sketchId);
-  if (!ft.pathSketchId) throw new FeatureError('Yol sketch\'i seçilmedi');
-  if (ft.pathSketchId === ft.sketchId) throw new FeatureError('Profil ve yol ayrı sketch\'lerde olmalı');
-  const pathSk = sketchOf(st, ft.pathSketchId);
+  const frameMode = ft.pathMode === 'frame';
   const regions = selectRegions(findRegions(prof.entities), ft.profilePoints);
   if (!regions.length) throw new FeatureError('Profil sketch\'inde kapalı bölge bulunamadı');
-  const pf = frameOf(pathSk.plane);
-  const chain = pathChain(pathSk);
-  const closed = chain.closed;
   // Profil çerçevesi (auto): kenar başında, yola dik; x = yol düzlemi normali, y = yolun sağı.
   // rotate n etrafında döndürür; flip x ve n'yi birlikte çevirir (sağ el kuralı korunur, y aynı kalır).
   const autoLocal = () => {
@@ -752,11 +797,25 @@ function doSweep(st: State, ft: SweepFeature) {
     const n: Vec3 = [0, 0, sgn];
     return { o: [0, 0, 0] as Vec3, x, y: cross(n, x), n };
   };
+  let pf: Frame;
+  let chain: { segs: PathSeg[]; closed: boolean };
+  if (frameMode) {
+    pf = frameOf(ft.framePlane ?? BASE_PLANES.XZ);
+    chain = { segs: frameChain(ft, regions, autoLocal()), closed: true };
+  } else {
+    if (!ft.pathSketchId) throw new FeatureError('Yol sketch\'i seçilmedi');
+    if (ft.pathSketchId === ft.sketchId) throw new FeatureError('Profil ve yol ayrı sketch\'lerde olmalı');
+    const pathSk = sketchOf(st, ft.pathSketchId);
+    pf = frameOf(pathSk.plane);
+    chain = pathChain(pathSk);
+  }
+  const closed = chain.closed;
+  const auto = frameMode || ft.placement === 'auto';
   // Düz kenarlı yol + gönyeli köşe: kenar başına çıta, açıortaydan kesim
   if (ft.corner !== 'round' && chain.segs.every((s) => s.kind === 'line')) {
     const lines = chain.segs as { kind: 'line'; a: Vec2; b: Vec2 }[];
     const base = lineFrame(pf, lines[0]);
-    const local = ft.placement === 'auto' ? autoLocal() : frameIn(frameOf(prof.plane), base);
+    const local = auto ? autoLocal() : frameIn(frameOf(prof.plane), base);
     const bars = miterBars(pf, lines, closed, regions, local);
     const tool = compoundOf(bars);
     applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
@@ -764,7 +823,7 @@ function doSweep(st: State, ft: SweepFeature) {
     return;
   }
   let segs = chain.segs;
-  if (closed && ft.placement === 'auto') segs = startAtMid(segs);
+  if (closed && auto) segs = startAtMid(segs);
   let spine: Wire;
   try {
     spine = assembleWire(segs.map((s) => pathEdge(pf, s)));
@@ -773,7 +832,7 @@ function doSweep(st: State, ft: SweepFeature) {
   }
   // Profil çerçevesi: auto → yolun başında, yola dik
   let frame = frameOf(prof.plane);
-  if (ft.placement === 'auto') {
+  if (auto) {
     const { p, t } = pathStart(segs[0]);
     const n = unit(add(mul(pf.x, t[0]), mul(pf.y, t[1])));
     const o = to3(pf, p);
@@ -794,7 +853,7 @@ function doSweep(st: State, ft: SweepFeature) {
   const sweepWire = (w: Wire): Shape3D => {
     let r: Shape3D;
     try {
-      r = genericSweep(w, spine, { transitionMode: mode, forceProfileSpineOthogonality: ft.placement === 'auto' }) as Shape3D;
+      r = genericSweep(w, spine, { transitionMode: mode, forceProfileSpineOthogonality: auto }) as Shape3D;
     } catch (e) {
       throw new FeatureError(errText(e, 'Süpürme başarısız (profil yola dik ve yolun başında olmalı)'));
     }

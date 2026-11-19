@@ -267,6 +267,8 @@ function describe(f: Feature): string {
     case 'revolve':
       return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${Number(f.angle.toFixed(1))}°`;
     case 'sweep':
+      if (f.pathMode === 'frame')
+        return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${Number((f.frameW ?? 0).toFixed(1))}×${Number((f.frameH ?? 0).toFixed(1))} çerçeve`;
       return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${f.corner === 'round' ? 'yuvarlak' : 'gönyeli'} köşe`;
     case 'fillet':
       return `R${Number(f.radius.toFixed(2))} · ${f.edges.length} kenar`;

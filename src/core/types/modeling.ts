@@ -301,6 +301,16 @@ export interface SweepFeature extends FeatureBase {
   flip: boolean;
   /** Köşe birleşimi: gönyeli (keskin) ya da yuvarlak */
   corner: 'right' | 'round';
+  /**
+   * Yol kaynağı: sketch (pathSketchId) ya da çerçeve (yol çizmeden, framePlane üzerinde orijine ortalı
+   * frameW × frameH dikdörtgen). Eski kayıtlarda yok → sketch.
+   */
+  pathMode?: 'sketch' | 'frame';
+  frameW?: number;
+  frameH?: number;
+  /** Ölçü neyi gösterir: profilin dış kenarı, iç kenarı ya da profil orijin hattı (eksen) */
+  frameRef?: 'outer' | 'inner' | 'center';
+  framePlane?: PlaneDef;
   operation: BoolOp;
   merge?: boolean;
 }

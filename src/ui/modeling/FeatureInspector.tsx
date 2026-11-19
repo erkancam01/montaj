@@ -126,6 +126,12 @@ function validate(d: Feature, body: Body | undefined, ui: { profileMode: 'all' |
       return null;
     }
     case 'sweep':
+      if (d.pathMode === 'frame') {
+        if (!sketch(d.sketchId)) return 'Profil sketch\'ini seçin';
+        if (ui.profileMode === 'pick' && !d.profilePoints.length) return 'Sahnede en az bir profil bölgesi seçin';
+        if (!((d.frameW ?? 0) > 0) || !((d.frameH ?? 0) > 0)) return 'Genişlik ve yükseklik sıfırdan büyük olmalı';
+        return null;
+      }
       if (!sketch(d.sketchId)) return 'Profil sketch\'ini seçin';
       if (!sketch(d.pathSketchId)) return 'Yol sketch\'ini seçin';
       if (d.pathSketchId === d.sketchId) return 'Profil ve yol ayrı sketch\'lerde olmalı';
@@ -583,11 +589,28 @@ function guessPathSketch(body: Body | undefined, profileId: string): string {
   return (sks.find((s) => regionsOf(s) === 0) ?? sks[sks.length - 1])?.id ?? '';
 }
 
+const FRAME_PLANES = [
+  { v: 'XZ', label: 'Ön', title: 'Ön düzlem (dik duran çerçeve)' },
+  { v: 'XY', label: 'Üst', title: 'Üst düzlem (yatan çerçeve)' },
+  { v: 'YZ', label: 'Sağ', title: 'Sağ düzlem' },
+] as const;
+
 function SweepForm({ d, body }: { d: SweepFeature; body: Body | undefined }) {
   const cut = d.operation === 'cut';
+  const k = `feat:${d.id}`;
+  const frame = d.pathMode === 'frame';
+  // Taslak ilk açıldığında: profilden başka sketch yoksa yol çizmeden çerçeve kipi önerilir (bir kez)
+  const suggested = useRef<string | null>(null);
+  useEffect(() => {
+    if (suggested.current === d.id) return;
+    suggested.current = d.id;
+    if (d.pathMode === 'frame' || d.pathSketchId) return;
+    const others = (body?.features ?? []).filter((f) => f.type === 'sketch' && f.id !== d.sketchId);
+    if (!others.length) up({ pathMode: 'frame' });
+  }, [d.id]);
   // Yol seçilmemişse tahmin et; profil sketch'inde bölge yoksa ve yol adayında varsa yer değiştir
   useEffect(() => {
-    if (d.pathSketchId) return;
+    if (frame || d.pathSketchId) return;
     const prof = body?.features.find((f): f is SketchFeature => f.id === d.sketchId && f.type === 'sketch');
     let hasRegions = false;
     try {
@@ -611,7 +634,8 @@ function SweepForm({ d, body }: { d: SweepFeature; body: Body | undefined }) {
     }
     const p = guessPathSketch(body, d.sketchId);
     if (p) up({ pathSketchId: p });
-  }, [d.pathSketchId, d.sketchId, body]);
+  }, [frame, d.pathSketchId, d.sketchId, body]);
+  const planeKey = (basePlaneName(d.framePlane ?? BASE_PLANES.XZ, BASE_PLANES) ?? 'XZ') as keyof typeof BASE_PLANES;
 
   return (
     <section className="prop-section">
@@ -619,12 +643,59 @@ function SweepForm({ d, body }: { d: SweepFeature; body: Body | undefined }) {
         <SketchSelect body={body} value={d.sketchId} onChange={(id) => up({ sketchId: id, profilePoints: [] })} />
       </Field>
       <ProfileField d={d} body={body} />
-      <Field
-        label="Yol"
-        hint="Yol sketch'indeki çizgi/yay zinciri (yardımcı çizgiler hariç). Kapalı yol (ör. dikdörtgen) gönyeli bir çerçeve üretir."
-      >
-        <SketchSelect body={body} value={d.pathSketchId} onChange={(id) => up({ pathSketchId: id })} />
+      <Field label="Yol">
+        <Seg
+          label="Yol"
+          value={frame ? 'frame' : 'sketch'}
+          onChange={(v) => up({ pathMode: v })}
+          options={[
+            { v: 'frame', label: 'Çerçeve', title: 'Yol çizmeden genişlik × yükseklik dikdörtgen çerçeve' },
+            { v: 'sketch', label: 'Sketch', title: "Yol sketch'indeki çizgi/yay zinciri boyunca" },
+          ]}
+        />
       </Field>
+      {frame ? (
+        <>
+          <Field label="Genişlik">
+            <Num field="frameW" k={`${k}:fw`} value={d.frameW ?? 1000} min={0} onChange={(v) => up({ frameW: v })} />
+          </Field>
+          <Field label="Yükseklik">
+            <Num field="frameH" k={`${k}:fh`} value={d.frameH ?? 600} min={0} onChange={(v) => up({ frameH: v })} />
+          </Field>
+          <Field
+            label="Ölçü"
+            hint={
+              (d.frameRef ?? 'outer') === 'outer'
+                ? 'Genişlik / yükseklik çerçevenin dış ölçüsü.'
+                : d.frameRef === 'inner'
+                  ? 'Genişlik / yükseklik çerçevenin iç (boşluk) ölçüsü.'
+                  : "Genişlik / yükseklik profil sketch'inin orijin hattından ölçülür."
+            }
+          >
+            <Seg
+              label="Ölçü"
+              value={d.frameRef ?? 'outer'}
+              onChange={(v) => up({ frameRef: v })}
+              options={[
+                { v: 'outer', label: 'Dış', title: 'Dış ölçü' },
+                { v: 'inner', label: 'İç', title: 'İç (boşluk) ölçüsü' },
+                { v: 'center', label: 'Eksen', title: 'Profil orijin hattı' },
+              ]}
+            />
+          </Field>
+          <Field label="Düzlem" hint="Çerçeve gövde orijinine ortalanır.">
+            <Seg label="Çerçeve düzlemi" value={planeKey} onChange={(v) => up({ framePlane: BASE_PLANES[v] })} options={[...FRAME_PLANES]} />
+          </Field>
+        </>
+      ) : (
+        <Field
+          label="Yol sketch'i"
+          hint="Yol sketch'indeki çizgi/yay zinciri (yardımcı çizgiler hariç). Kapalı yol (ör. dikdörtgen) gönyeli bir çerçeve üretir."
+        >
+          <SketchSelect body={body} value={d.pathSketchId} onChange={(id) => up({ pathSketchId: id })} />
+        </Field>
+      )}
+      {!frame && (
       <Field
         label="Yerleşim"
         hint={
@@ -643,7 +714,8 @@ function SweepForm({ d, body }: { d: SweepFeature; body: Body | undefined }) {
           ]}
         />
       </Field>
-      {d.placement === 'auto' && (
+      )}
+      {(frame || d.placement === 'auto') && (
         <>
           <Field label="Döndür">
             <Seg

@@ -88,7 +88,7 @@ export function preferredSketch(bodyId: string): string | null {
   for (const f of body.features) {
     if (!isProfileFeature(f)) continue;
     used.add(f.sketchId);
-    if (f.type === 'sweep') used.add(f.pathSketchId);
+    if (f.type === 'sweep' && f.pathMode !== 'frame') used.add(f.pathSketchId);
   }
   for (let i = body.features.length - 1; i >= 0; i--) {
     const f = body.features[i];
@@ -430,7 +430,7 @@ export function startCommandWatchers() {
         if (!f) queueMicrotask(() => discardIfEmpty(id));
       }
       if (f && f.type === 'sketch' && body) {
-        const used = body.features.some((x) => isProfileFeature(x) && (x.sketchId === f.id || (x.type === 'sweep' && x.pathSketchId === f.id)));
+        const used = body.features.some((x) => isProfileFeature(x) && (x.sketchId === f.id || (x.type === 'sweep' && x.pathMode !== 'frame' && x.pathSketchId === f.id)));
         let closed = false;
         try {
           closed = sketchRegions(f).length > 0;

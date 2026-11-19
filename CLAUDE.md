@@ -46,7 +46,8 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
   Chrome Ctrl+N'yi çoğu zaman kendine ayırır (Dosya ▸ Yeni kullanılır).
 - Sketch: trim, teğet yay, spline yok (DXF spline/elips kısa çizgilerle yaklaşık gelir).
 - DXF ile gelen profil sabit geometridir (ext): taşımak için silip yeniden içe aktar. DWG okunmuyor.
-- Süpür: yol tek düzlemsel sketch zinciri. Düz kenarlı yol + gönyeli köşe → `miterBars` (kenar başına çıta,
+- Süpür: yol tek düzlemsel sketch zinciri ya da `pathMode: 'frame'` (yol çizmeden frameW × frameH dikdörtgen,
+  `frameChain` profilin y uzanımıyla dış/iç ölçüyü eksene çevirir). Düz kenarlı yol + gönyeli köşe → `miterBars` (kenar başına çıta,
   açıortaydan kesim); yay içeren ya da yuvarlak köşeli yol → OCC pipe shell. Kesim listesi yok.
 - Bölge bulma (`core/sketch/profiles.ts`): köprü kenarlar atılır, kendine değen döngüler bölünür, dolu/boş
   komşu yüzlerde dönüşümlü (tek-çift kuralı). Geçersiz delikli yüzde kernel `regionSolid` katı Boolean'a düşer.
