@@ -44,6 +44,11 @@ export interface Part extends Transform {
   visible: boolean;
   /** Kullanıcı rengi (#rrggbb). null = STEP'teki renk. */
   color: string | null;
+  /**
+   * Sabit parça: mate çözücü ve fareyle/gizmoyla taşıma onu hiç hareket ettirmez.
+   * Gruptaki bir üye sabitse grubun tamamı sabittir. Eski kayıtlarda yoktur: normalizeDoc ilk instance'ı sabitler.
+   */
+  fixed?: boolean;
 }
 
 /** Kaydedilen/geri alınabilen proje belgesi. */
@@ -102,7 +107,8 @@ export interface FaceRef {
 }
 
 /**
- * Kalıcı mate. a = referans (yerinde kalır), b = hareketli (çözücü b'nin parçasını taşır).
+ * Kalıcı mate. Varsayılan: a = referans (yerinde kalır), b = hareketli. Çözücü sabit parçalar, sürüklenen
+ * (tutulan) gövde ve sabite olan mate uzaklığına göre yönü tersine çevirebilir (bkz. mateSolver).
  *
  * Yön kuralları (d = düzlemde dış normal, silindirde eksen):
  * - coincident: flip=false → n_b = -n_a (yüzler karşı karşıya), flip=true → n_b = +n_a.
