@@ -4,7 +4,12 @@
 // Mate'li gövdeler çözücüde "tutulan" olarak çözülür: hareket kalan serbestlik yönlerine izdüşer
 // (eşmerkezlide eksen etrafında dönme + eksen boyunca kayma, tam tanımlıda kıpırdamaz).
 // 4 px eşiğinin altı tıklamadır (seçim PartNode'da); hareketsiz sağ tıka dokunulmaz.
+// Dokunmatikte parça sürüklemesi yalnız dokunmatik araç çubuğundaki "Taşı" (sol-sürükle eşdeğeri) ya da
+// "Döndür" (sağ-sürükle eşdeğeri) kipi açıkken yapılır; kapalıyken tek parmak kameraya aittir.
+// Kip açıkken parçaya uzun basmak (hareketsiz ~500 ms) yine sağ tık menüsünü açar.
 import { useEffect } from 'react';
+import { fireLongPress, hapticTick, LONG_PRESS_MS, TAP_PX } from '../../hooks/useLongPress';
+import { touchMode } from './touchState';
 import { useThree } from '@react-three/fiber';
 import { Plane, Quaternion, Raycaster, Vector2, Vector3, type Camera, type Object3D } from 'three';
 import { composeT, invertT, partWorld } from '../../lib/math';
@@ -32,6 +37,9 @@ interface MoveSet {
 interface DragState {
   button: 0 | 2;
   pointerId: number;
+  /** Dokunmatik sürükleme (eşik TAP_PX, uzun basma zamanlayıcısı) */
+  touch: boolean;
+  lpTimer: number;
   startX: number;
   startY: number;
   lastX: number;
@@ -251,7 +259,8 @@ export function DragController() {
         if (cancel) st.updateLive((base) => base);
         st.endDrag();
       }
-      if (d.button === 2 && d.active) rightDragEndedAt = performance.now();
+      if (d.button === 2 && d.active && !d.touch) rightDragEndedAt = performance.now();
+      window.clearTimeout(d.lpTimer);
       restoreControls();
       drag = null;
       window.removeEventListener('pointermove', onMove, true);
@@ -264,7 +273,8 @@ export function DragController() {
       const d = drag;
       if (!d || e.pointerId !== d.pointerId) return;
       if (!d.active) {
-        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < THRESHOLD_PX) return;
+        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < (d.touch ? TAP_PX : THRESHOLD_PX)) return;
+        window.clearTimeout(d.lpTimer);
         beginActive(d);
       }
       if (d.blocked) return;
@@ -289,7 +299,15 @@ export function DragController() {
 
     const onDown = (e: PointerEvent) => {
       if (e.target !== canvas || drag) return;
-      if (e.button !== 0 && e.button !== 2) return;
+      const touch = e.pointerType === 'touch';
+      let button = e.button;
+      if (touch) {
+        // Dokunmatik: yalnız Taşı / Döndür kipinde ve ilk parmakla
+        const mode = touchMode();
+        if (mode === 'camera' || !e.isPrimary || e.button !== 0) return;
+        button = mode === 'move' ? 0 : 2;
+      }
+      if (button !== 0 && button !== 2) return;
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       if (!eligible()) return;
       const hit = pickPart(e.clientX, e.clientY);
@@ -298,8 +316,10 @@ export function DragController() {
       const set = moveSetOf(st.doc, hit.partId, st.ui.selectMode);
       if (!set) return;
       drag = {
-        button: e.button as 0 | 2,
+        button: button as 0 | 2,
         pointerId: e.pointerId,
+        touch,
+        lpTimer: 0,
         startX: e.clientX,
         startY: e.clientY,
         lastX: e.clientX,
@@ -310,6 +330,17 @@ export function DragController() {
         blocked: false,
         controlsWas: null,
       };
+      if (touch) {
+        // Kıpırdamadan uzun basma: sürükleme yerine sağ tık menüsü
+        const d0 = drag;
+        const { clientX: x, clientY: y, pointerId: pid } = e;
+        d0.lpTimer = window.setTimeout(() => {
+          if (drag !== d0 || d0.active) return;
+          finish(true);
+          hapticTick();
+          fireLongPress(canvas, x, y, pid);
+        }, LONG_PRESS_MS);
+      }
       // Parçanın üstünde basıldı: kamera kontrolü bu sürüklemeyi almasın (bırakınca geri açılır)
       if (controls) {
         drag.controlsWas = controls.enabled;

@@ -17,6 +17,7 @@ import { PopupMenu, type MenuEntry } from './command/PopupMenu';
 import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from './GroupList';
 import { IconChevron, IconEye, IconEyeOff, IconLink } from './icons';
 import { MateList } from './MateList';
+import { longPressProps } from '../hooks/useLongPress';
 import { FIcon } from './modeling/featureIcons';
 import { BodyFeatureList, BuildBadge, RenameInput } from './modeling/FeatureTree';
 
@@ -201,6 +202,7 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
       <div
         ref={rowRef}
         className={cls}
+        {...longPressProps}
         onClick={() => selectInstance(id)}
         onDoubleClick={() => focusInstance(id)}
         onContextMenu={(e) => {
@@ -340,6 +342,7 @@ const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; paren
         role="treeitem"
         aria-selected={info.selected || info.extra}
         className={rowClass(info, dim, 'tree-part')}
+        {...longPressProps}
         onClick={(e) => selectPartRow(id, isAdditive(e))}
         onDoubleClick={(e) => {
           if (!isAdditive(e)) focusPartRow(id);
@@ -428,6 +431,7 @@ function BodyRow({ instanceId, partId, bodyId, instanceVisible }: { instanceId: 
         ref={rowRef}
         className={cls}
         title={body.active ? 'Düzenleniyor' : 'Çift tık: özellik geçmişini düzenle'}
+        {...longPressProps}
         onClick={(e) => selectPartRow(partId, isAdditive(e))}
         onDoubleClick={() => {
           if (!body.active && !body.locked) enterBody(bodyId);

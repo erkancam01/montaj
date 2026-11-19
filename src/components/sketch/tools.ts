@@ -114,7 +114,15 @@ interface Snap {
 
 const SNAP_PX = 9;
 const CURVE_PX = 6;
+/** Dokunmatikte parmak imleçten çok daha kaba: yakalama yarıçapları büyür */
+const TOUCH_SNAP_PX = 24;
+const TOUCH_CURVE_PX = 14;
 const INFER_DEG = 3;
+
+/** Son sketch girdisi dokunma mıydı */
+let touchInput = false;
+const snapPx = () => (touchInput ? TOUCH_SNAP_PX : SNAP_PX);
+const curvePx = () => (touchInput ? TOUCH_CURVE_PX : CURVE_PX);
 
 function pointRole(d: SketchFeature, id: string): string {
   for (const e of d.entities) {
@@ -133,7 +141,7 @@ function snapAt(raw: Vec2, d: SketchFeature, exclude?: Set<string>): Snap {
   for (const p of pm.values()) {
     if (exclude?.has(p.id)) continue;
     const dd = dist(raw, v2(p));
-    if (dd < SNAP_PX * px && (!best || dd < best.d)) best = { id: p.id, d: dd };
+    if (dd < snapPx() * px && (!best || dd < best.d)) best = { id: p.id, d: dd };
   }
   if (best) {
     const p = pm.get(best.id)!;
@@ -145,23 +153,23 @@ function snapAt(raw: Vec2, d: SketchFeature, exclude?: Set<string>): Snap {
     const lp = linePts(e, pm);
     if (!lp) continue;
     const m: Vec2 = [(lp[0][0] + lp[1][0]) / 2, (lp[0][1] + lp[1][1]) / 2];
-    if (dist(raw, m) < SNAP_PX * px) return { pos: m, midOf: e.id, hint: 'Orta nokta' };
+    if (dist(raw, m) < snapPx() * px) return { pos: m, midOf: e.id, hint: 'Orta nokta' };
   }
   // 3) orijin
-  if (Math.hypot(raw[0], raw[1]) < SNAP_PX * px) return { pos: [0, 0], origin: true, hint: 'Orijin' };
+  if (Math.hypot(raw[0], raw[1]) < snapPx() * px) return { pos: [0, 0], origin: true, hint: 'Orijin' };
   // 4) eğri üzerinde
   let bc: { id: string; d: number; foot: Vec2 } | null = null;
   for (const e of d.entities) {
     if (!isCurve(e) || exclude?.has(e.id)) continue;
     const r = distToCurve(raw, e, pm);
-    if (r && r.d < CURVE_PX * px && (!bc || r.d < bc.d)) bc = { id: e.id, d: r.d, foot: r.foot };
+    if (r && r.d < curvePx() * px && (!bc || r.d < bc.d)) bc = { id: e.id, d: r.d, foot: r.foot };
   }
   if (bc) return { pos: bc.foot, onCurve: bc.id, hint: 'Eğri üzerinde' };
   // 5) eksenler (yalnız konum)
   const st = useAssembly.getState().ui;
   const grid = (v: number) => (st.snap && st.snapMove > 0 ? Math.round(v / st.snapMove) * st.snapMove : v);
-  if (Math.abs(raw[1]) < CURVE_PX * px) return { pos: [grid(raw[0]), 0], hint: 'X ekseni' };
-  if (Math.abs(raw[0]) < CURVE_PX * px) return { pos: [0, grid(raw[1])], hint: 'Y ekseni' };
+  if (Math.abs(raw[1]) < curvePx() * px) return { pos: [grid(raw[0]), 0], hint: 'X ekseni' };
+  if (Math.abs(raw[0]) < curvePx() * px) return { pos: [0, grid(raw[1])], hint: 'Y ekseni' };
   // 6) ızgara
   return { pos: [grid(raw[0]), grid(raw[1])], hint: null };
 }
@@ -278,14 +286,14 @@ function hitTest(raw: Vec2, d: SketchFeature): Hit | null {
   let bp: { id: string; d: number } | null = null;
   for (const p of pm.values()) {
     const dd = dist(raw, v2(p));
-    if (dd < SNAP_PX * px && (!bp || dd < bp.d)) bp = { id: p.id, d: dd };
+    if (dd < snapPx() * px && (!bp || dd < bp.d)) bp = { id: p.id, d: dd };
   }
   if (bp) return { id: bp.id, kind: 'point' };
   let bc: { e: SkEntity; d: number } | null = null;
   for (const e of d.entities) {
     if (!isCurve(e)) continue;
     const r = distToCurve(raw, e, pm);
-    if (r && r.d < CURVE_PX * px && (!bc || r.d < bc.d)) bc = { e, d: r.d };
+    if (r && r.d < curvePx() * px && (!bc || r.d < bc.d)) bc = { e, d: r.d };
   }
   return bc ? { id: bc.e.id, kind: bc.e.kind } : null;
 }
@@ -815,7 +823,199 @@ function boxSelect(x0: number, y0: number, x1: number, y1: number, additive: boo
 
 // ---------------------------------------------------------------- DOM olayları (SketchLayer bağlar)
 
+// ---------------------------------------------------------------- Dokunmatik
+// Tek parmak = araç (fare sol tuşu gibi). Çizim: dokun-dokun (her dokunma bir adım) ya da
+// dokun-sürükle-bırak (basılan yer ilk adım, bırakılan yer sonraki adım). İkinci parmak gelince tek
+// parmak hareketi iptal edilir; iki parmak kameraya aittir (CadControls: kaydır / çimdik).
+// Uzun basma (~500 ms, kıpırdamadan) = Esc (çizimi / aracı bırak). Hover yok: önizleme parmağı izler.
+
+const TOUCH_TAP_PX = 8;
+const TOUCH_LONG_MS = 500;
+
+interface TouchGesture {
+  id: number;
+  startX: number;
+  startY: number;
+  startRaw: Vec2;
+  moved: boolean;
+  /** Sürükleme başlarken ilk adım bu hareketle mi işlendi (iptalde geri alınır) */
+  startedStep: boolean;
+  /** Seç aracında selectDown çağrıldı mı */
+  selectStarted: boolean;
+  cancelled: boolean;
+  timer: number;
+}
+
+const touchIds = new Set<number>();
+let tg: TouchGesture | null = null;
+
+/** selectDown / dragMove yalnız bu alanları okur */
+function fakePointer(x: number, y: number): PointerEvent {
+  return { clientX: x, clientY: y, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false } as PointerEvent;
+}
+
+function cancelTouchGesture() {
+  const g = tg;
+  if (!g) return;
+  window.clearTimeout(g.timer);
+  g.cancelled = true;
+  if (g.startedStep && ctl.pts.length) {
+    resetDraw();
+    refreshPreview();
+  }
+  const d = ctl.drag;
+  if (d) {
+    ctl.drag = null;
+    if (d.started) endGesture();
+  }
+  ctl.boxStart = null;
+  setDraw({ box: null });
+}
+
+/** Seç aracında parmak kalkınca (fare sol tuş bırakma ile aynı) */
+function selectUp() {
+  const g = ctl.drag;
+  if (g) {
+    ctl.drag = null;
+    if (g.started) endGesture();
+    return;
+  }
+  const b = ctl.boxStart;
+  if (b) {
+    ctl.boxStart = null;
+    const box = useDraw.getState().box;
+    setDraw({ box: null });
+    if (box) boxSelect(box.x0, box.y0, box.x1, box.y1, b.additive);
+    else if (!b.additive) setSelection([]);
+  }
+}
+
+function touchDown(e: PointerEvent) {
+  touchInput = true;
+  touchIds.add(e.pointerId);
+  if (touchIds.size > 1) {
+    cancelTouchGesture();
+    return;
+  }
+  const ae = document.activeElement;
+  if (ae instanceof HTMLElement && ae !== document.body && !ae.closest('.sk-typed')) ae.blur();
+  const raw = clientToSketch(e.clientX, e.clientY);
+  if (!raw) return;
+  ctl.lastRaw = raw;
+  ctl.lastClient = { x: e.clientX, y: e.clientY };
+  const g: TouchGesture = {
+    id: e.pointerId,
+    startX: e.clientX,
+    startY: e.clientY,
+    startRaw: raw,
+    moved: false,
+    startedStep: false,
+    selectStarted: false,
+    cancelled: false,
+    timer: 0,
+  };
+  g.timer = window.setTimeout(() => {
+    if (tg !== g || g.moved || g.cancelled) return;
+    cancelTouchGesture();
+    try {
+      navigator.vibrate?.(15);
+    } catch {
+      /* yok say */
+    }
+    escape();
+    refreshPreview();
+  }, TOUCH_LONG_MS);
+  tg = g;
+  const tool = ui().tool;
+  if (tool !== 'select' && tool !== 'project') {
+    setDraw({ cursor: clientToOverlay(e.clientX, e.clientY) });
+    refreshPreview();
+  }
+}
+
+function touchMove(e: PointerEvent) {
+  const g = tg;
+  if (!g || e.pointerId !== g.id || g.cancelled || touchIds.size > 1) return;
+  const raw = clientToSketch(e.clientX, e.clientY);
+  if (!raw) return;
+  ctl.lastRaw = raw;
+  ctl.lastClient = { x: e.clientX, y: e.clientY };
+  const cursor = clientToOverlay(e.clientX, e.clientY);
+  const tool = ui().tool;
+  if (!g.moved && Math.hypot(e.clientX - g.startX, e.clientY - g.startY) >= TOUCH_TAP_PX) {
+    g.moved = true;
+    window.clearTimeout(g.timer);
+    if (tool === 'select') {
+      g.selectStarted = true;
+      selectDown(fakePointer(g.startX, g.startY), g.startRaw);
+    } else if (tool !== 'project' && tool !== 'dimension' && tool !== 'point' && !ctl.pts.length) {
+      // Dokun-sürükle-bırak: basılan yer ilk adım
+      ctl.lastRaw = g.startRaw;
+      refreshPreview();
+      commitStep();
+      g.startedStep = ctl.pts.length > 0;
+      ctl.lastRaw = raw;
+    }
+  }
+  if (tool === 'select') {
+    if (!g.selectStarted) return;
+    if (ctl.drag) dragMove(e, raw);
+    else if (ctl.boxStart) {
+      const b = ctl.boxStart;
+      if (Math.hypot(cursor.x - b.x, cursor.y - b.y) > 3) setDraw({ box: { x0: b.x, y0: b.y, x1: cursor.x, y1: cursor.y } });
+    }
+    return;
+  }
+  if (tool === 'project') return;
+  setDraw({ cursor });
+  refreshPreview();
+}
+
+function touchUp(e: PointerEvent) {
+  touchIds.delete(e.pointerId);
+  const g = tg;
+  if (!g || e.pointerId !== g.id) return;
+  tg = null;
+  window.clearTimeout(g.timer);
+  (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
+  if (g.cancelled || e.type === 'pointercancel') {
+    if (!g.cancelled) cancelTouchGesture();
+    return;
+  }
+  const raw = clientToSketch(e.clientX, e.clientY) ?? ctl.lastRaw;
+  if (!raw) return;
+  ctl.lastRaw = raw;
+  const tool = ui().tool;
+  if (tool === 'select') {
+    if (!g.selectStarted) selectDown(fakePointer(g.startX, g.startY), g.startRaw);
+    selectUp();
+    return;
+  }
+  if (tool === 'dimension') {
+    dimClick(raw);
+    return;
+  }
+  if (tool === 'project') {
+    const src = pickProjectionSource(e.clientX, e.clientY);
+    if (src) addProjection(src);
+    else toast('Burada bir parça yüzü ya da kenarı yok.');
+    return;
+  }
+  // Dokunma ya da sürükleyip bırakma: bırakılan yer bir adım
+  refreshPreview();
+  commitStep();
+}
+
+export function onPointerCancel(e: PointerEvent) {
+  if (e.pointerType === 'touch') touchUp(e);
+}
+
 export function onPointerDown(e: PointerEvent) {
+  if (e.pointerType === 'touch') {
+    touchDown(e);
+    return;
+  }
+  touchInput = false;
   if (e.button === 2) {
     ctl.rightDown = { x: e.clientX, y: e.clientY };
     return;
@@ -850,6 +1050,10 @@ export function onPointerDown(e: PointerEvent) {
 }
 
 export function onPointerMove(e: PointerEvent) {
+  if (e.pointerType === 'touch') {
+    touchMove(e);
+    return;
+  }
   const raw = clientToSketch(e.clientX, e.clientY);
   ctl.lastClient = { x: e.clientX, y: e.clientY };
   const cursor = clientToOverlay(e.clientX, e.clientY);
@@ -882,6 +1086,10 @@ export function onPointerMove(e: PointerEvent) {
 }
 
 export function onPointerUp(e: PointerEvent) {
+  if (e.pointerType === 'touch') {
+    touchUp(e);
+    return;
+  }
   if (e.button === 2) {
     const r = ctl.rightDown;
     ctl.rightDown = null;
@@ -893,23 +1101,12 @@ export function onPointerUp(e: PointerEvent) {
   }
   if (e.button !== 0) return;
   (e.target as Element | null)?.releasePointerCapture?.(e.pointerId);
-  const g = ctl.drag;
-  if (g) {
-    ctl.drag = null;
-    if (g.started) endGesture();
-    return;
-  }
-  const b = ctl.boxStart;
-  if (b) {
-    ctl.boxStart = null;
-    const box = useDraw.getState().box;
-    setDraw({ box: null });
-    if (box) boxSelect(box.x0, box.y0, box.x1, box.y1, b.additive);
-    else if (!b.additive) setSelection([]);
-  }
+  selectUp();
 }
 
-export function onPointerLeave() {
+export function onPointerLeave(e?: PointerEvent) {
+  // Dokunmada parmak kalkınca pointerleave gelir; önizleme parmağın son konumunda kalsın
+  if (e?.pointerType === 'touch') return;
   if (!ctl.drag && !ctl.boxStart) {
     setDraw({ cursor: null, marker: null, hint: null, preview: ctl.pts.length ? useDraw.getState().preview : null });
     setHover(null);

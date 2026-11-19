@@ -81,10 +81,13 @@ export function useViewShortcuts() {
     };
 
     window.addEventListener('pointermove', onMove, { passive: true });
+    // Dokunmatikte hover yok: Space menüsü (harici klavyeyle) son dokunulan yerde açılsın
+    window.addEventListener('pointerdown', onMove, { passive: true });
     // Yakalama aşaması: tarayıcı kısayollarından ve diğer dinleyicilerden önce
     window.addEventListener('keydown', onKeyDown, true);
     return () => {
       window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onMove);
       window.removeEventListener('keydown', onKeyDown, true);
     };
   }, []);

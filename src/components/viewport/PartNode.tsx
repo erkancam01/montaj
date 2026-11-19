@@ -168,7 +168,8 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
 
   const onClick = useCallback(
     (e: ThreeEvent<MouseEvent>) => {
-      if (e.delta > 4) return; // orbit sürüklemesi
+      // orbit sürüklemesi (dokunmada parmak titremesine daha geniş pay)
+      if (e.delta > ((e.nativeEvent as PointerEvent).pointerType === 'touch' ? 8 : 4)) return;
       e.stopPropagation();
       if (gizmoBusy()) return;
       const st = useAssembly.getState();

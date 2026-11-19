@@ -10,6 +10,8 @@ import { geometryCache } from '../../lib/geometryCache';
 import { useAssembly } from '../../store/useAssembly';
 import type { FaceRef } from '../../types';
 import { gizmoBusy, sceneRefs } from '../viewport/sceneRefs';
+import { multiTouchRecent } from '../viewport/touchState';
+import { longPressRecent, TAP_PX } from '../../hooks/useLongPress';
 import { isPlanarFace } from './commands';
 import { pointerState, useCommandUi, type SceneHit } from './commandStore';
 
@@ -80,7 +82,11 @@ export function ScenePointer() {
       const d = down[e.button];
       delete down[e.button];
       if (e.button !== 0 || !d) return;
-      if (d.moved > CLICK_TOL || Math.hypot(e.clientX - d.x, e.clientY - d.y) > CLICK_TOL) return;
+      const touch = e.pointerType === 'touch';
+      // Dokunmatik: uzun basma (sağ tık menüsü açıldı) ya da iki parmaklı hareket tıklama sayılmaz
+      if (touch && (longPressRecent() || multiTouchRecent())) return;
+      const tol = touch ? TAP_PX : CLICK_TOL;
+      if (d.moved > tol || Math.hypot(e.clientX - d.x, e.clientY - d.y) > tol) return;
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       const st = useAssembly.getState();
       if (st.modeling.sketch || st.modeling.feature || st.modeling.pick || st.ui.tool !== 'select') return;

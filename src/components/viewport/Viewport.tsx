@@ -14,6 +14,7 @@ import { SketchLayer } from '../sketch/SketchLayer';
 import { PickLayer } from '../modeling/PickLayer';
 import { useViewShortcuts } from '../../hooks/useViewShortcuts';
 import { ViewMenu } from './ViewMenu';
+import { TouchControls } from './TouchControls';
 
 const BACKGROUND = '#1e2228';
 
@@ -58,6 +59,7 @@ export function Viewport() {
         </GizmoHelper>
       </Canvas>
       <ViewMenu />
+      <TouchControls />
     </>
   );
 }
