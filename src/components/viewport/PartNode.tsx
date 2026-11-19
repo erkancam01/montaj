@@ -19,7 +19,7 @@ import { bodyIdOfFile, isBodyFileId } from '../../types';
 import { pickableFace } from '../../modeling/pick';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { FaceRef, Part } from '../../types';
-import { gizmoBusy, noRaycast } from './sceneRefs';
+import { gizmoBusy, inViewCube, noRaycast } from './sceneRefs';
 import { useRegistryRef } from './useRegistryRef';
 
 const DEFAULT_COLOR = '#c9ced6';
@@ -171,7 +171,7 @@ const PartMeshes = memo(function PartMeshes({ partId, instanceId, fileId, nodeKe
       // orbit sürüklemesi (dokunmada parmak titremesine daha geniş pay)
       if (e.delta > ((e.nativeEvent as PointerEvent).pointerType === 'touch' ? 8 : 4)) return;
       e.stopPropagation();
-      if (gizmoBusy()) return;
+      if (gizmoBusy() || inViewCube(e.nativeEvent.clientX, e.nativeEvent.clientY)) return;
       const st = useAssembly.getState();
       // Sketch oturumunda tıklamalar sketch katmanına aittir
       if (st.modeling.sketch) return;

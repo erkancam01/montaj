@@ -31,7 +31,7 @@ import { useAssembly } from '../../store/useAssembly';
 import { selectRegions, type Region } from '../../sketch/profiles';
 import type { Feature, PickRequest, PlaneDef, SketchFeature, Vec2, Vec3 } from '../../types';
 import { bodyFileId, isBodyFileId } from '../../types';
-import { sceneRefs } from '../viewport/sceneRefs';
+import { inViewCube, sceneRefs } from '../viewport/sceneRefs';
 import {
   bodyMesh,
   bodyScale,
@@ -398,7 +398,7 @@ function Interaction({ setHover }: { setHover(h: Hover | null): void }) {
       if (!raf) raf = requestAnimationFrame(update);
     };
     const onDown = (ev: PointerEvent) => {
-      down = ev.button === 0 ? { x: ev.clientX, y: ev.clientY } : null;
+      down = ev.button === 0 && !inViewCube(ev.clientX, ev.clientY) ? { x: ev.clientX, y: ev.clientY } : null;
     };
     const onLeave = () => {
       last = null;

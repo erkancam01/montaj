@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { GizmoHelper, GizmoViewport } from '@react-three/drei';
+import { ViewCube } from './ViewCube';
 import { NeutralToneMapping } from 'three';
 import { useAssembly } from '../../store/useAssembly';
 import { CameraRig } from './CameraRig';
@@ -10,7 +10,7 @@ import { DragController } from './DragController';
 import { Lights } from './Lights';
 import { SceneContent } from './SceneContent';
 import { SceneGrid } from './SceneGrid';
-import { gizmoBusy } from './sceneRefs';
+import { gizmoBusy, inViewCube } from './sceneRefs';
 import { SketchLayer } from '../sketch/SketchLayer';
 import { PickLayer } from '../modeling/PickLayer';
 import { useViewShortcuts } from '../../hooks/useViewShortcuts';
@@ -26,7 +26,7 @@ const DPR: [number, number] = [1, 2];
 const STYLE = { background: BACKGROUND };
 
 function onPointerMissed(e: MouseEvent) {
-  if (e.button !== 0 || gizmoBusy()) return;
+  if (e.button !== 0 || gizmoBusy() || inViewCube(e.clientX, e.clientY)) return;
   // Ctrl/Cmd/Shift ile çoklu seçim yaparken boşluğa tıklamak seçimi bozmasın
   if (e.ctrlKey || e.metaKey || e.shiftKey) return;
   const st = useAssembly.getState();
@@ -69,9 +69,7 @@ export function Viewport() {
         <SketchLayer />
         <PickLayer />
         <CameraRig />
-        <GizmoHelper alignment="bottom-right" margin={narrow ? [42, 42] : [72, 72]}>
-          <GizmoViewport axisColors={['#e5484d', '#30a46c', '#3e7bfa']} labelColor="#ffffff" scale={narrow ? 26 : 40} />
-        </GizmoHelper>
+        <ViewCube narrow={narrow} />
       </Canvas>
       <ViewMenu />
       <TouchControls />

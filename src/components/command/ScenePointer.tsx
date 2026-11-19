@@ -9,7 +9,7 @@ import { faceAtTriangle } from '../../lib/faceGeometry';
 import { geometryCache } from '../../lib/geometryCache';
 import { useAssembly } from '../../store/useAssembly';
 import type { FaceRef } from '../../types';
-import { gizmoBusy, sceneRefs } from '../viewport/sceneRefs';
+import { gizmoBusy, inViewCube, sceneRefs } from '../viewport/sceneRefs';
 import { multiTouchRecent } from '../viewport/touchState';
 import { longPressRecent, TAP_PX } from '../../hooks/useLongPress';
 import { isPlanarFace } from './commands';
@@ -62,6 +62,8 @@ export function ScenePointer() {
     };
 
     const onDown = (e: PointerEvent) => {
+      // Görünüm küpü tıklamaları küpe aittir
+      if (inViewCube(e.clientX, e.clientY)) return;
       down[e.button] = { x: e.clientX, y: e.clientY, moved: 0 };
       const ui = useCommandUi.getState();
       if (ui.contextBox || ui.contextMenu || ui.sMenu) ui.closePopups();

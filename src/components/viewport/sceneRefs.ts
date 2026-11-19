@@ -29,3 +29,22 @@ export function gizmoBusy(): boolean {
 
 /** Raycast'ten muaf tutulacak nesneler için */
 export function noRaycast() {}
+
+/** Görünüm küpünün sağ alt köşeden merkez uzaklığı (px); ViewCube yazar */
+let viewCubeMargin = 0;
+export function setViewCubeMargin(m: number) {
+  viewCubeMargin = m;
+}
+
+/**
+ * İmleç görünüm küpü alanında mı: oradaki tıklamalar küpe aittir, sahne seçimi / sürükleme / sketch
+ * araçları yok saymalıdır.
+ */
+export function inViewCube(clientX: number, clientY: number): boolean {
+  if (!viewCubeMargin) return false;
+  const cv = document.querySelector('.viewport-box canvas') ?? document.querySelector('canvas');
+  if (!cv) return false;
+  const r = cv.getBoundingClientRect();
+  const half = viewCubeMargin * 0.95;
+  return Math.abs(clientX - (r.right - viewCubeMargin)) < half && Math.abs(clientY - (r.bottom - viewCubeMargin)) < half;
+}

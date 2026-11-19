@@ -26,6 +26,7 @@ import { dimGeometry } from './annotations';
 import { boundsOf, curvePolyline, isCurve, pointMap, TAU, type PtMap } from './geom';
 import { onKeyDown, onPointerCancel, onPointerDown, onPointerLeave, onPointerMove, onPointerUp, resetController, useDraw } from './tools';
 import { pxSize, updateLabels, view, worldToSketch, type WorldPlane } from './view';
+import { inViewCube } from '../viewport/sceneRefs';
 import { lookAtPlane } from '../../lib/viewCommands';
 
 // ---------------------------------------------------------------- Renkler
@@ -208,7 +209,10 @@ function ActiveSketch() {
   // Canvas DOM girdisi
   useEffect(() => {
     const el = gl.domElement;
-    const down = (e: PointerEvent) => onPointerDown(e);
+    // Görünüm küpü alanındaki tıklamalar çizim aracına gitmez
+    const down = (e: PointerEvent) => {
+      if (!inViewCube(e.clientX, e.clientY)) onPointerDown(e);
+    };
     const ctx = (e: MouseEvent) => e.preventDefault();
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', onPointerMove);

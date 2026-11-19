@@ -17,7 +17,7 @@ import { applyWorldDelta, groupFrameWorld, groupOfPart } from '../../lib/rigid';
 import { lockedPartIds } from '../../modeling/refLocks';
 import { solve, toastFixedMove, useAssembly } from '../../store/useAssembly';
 import type { Doc, Transform } from '../../types';
-import { sceneRefs } from './sceneRefs';
+import { inViewCube, sceneRefs } from './sceneRefs';
 
 const THRESHOLD_PX = 4;
 /** Sağ sürüklemede piksel başına dönme (rad) */
@@ -298,7 +298,7 @@ export function DragController() {
     };
 
     const onDown = (e: PointerEvent) => {
-      if (e.target !== canvas || drag) return;
+      if (e.target !== canvas || drag || inViewCube(e.clientX, e.clientY)) return;
       const touch = e.pointerType === 'touch';
       let button = e.button;
       if (touch) {

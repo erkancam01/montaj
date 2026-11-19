@@ -89,6 +89,23 @@ export function setStandardView(name: StandardView) {
   c.animateTo({ target, quaternion: q, distance }, VIEW_DURATION);
 }
 
+/**
+ * Verilen yönden bakış (görünüm küpü: yüz, kenar ya da köşe). dir = hedeften kameraya (dünya, Z-yukarı).
+ * Ekran-yukarısı +Z; tam üstten/alttan bakışta Üst/Alt standart görünümlerindeki gibi ±Y.
+ */
+export function viewFromDirection(dir: Vector3) {
+  const c = controls;
+  if (!c) return;
+  const d = dir.clone().normalize();
+  if (!(d.lengthSq() > 0.5)) return;
+  let up = new Vector3(0, 0, 1);
+  if (Math.abs(d.z) > 0.999) up = new Vector3(0, d.z > 0 ? 1 : -1, 0);
+  const s = sceneSphere();
+  const target = s ? s.center.clone() : c.target.clone();
+  const distance = s ? fitDistance(c.camera, s.radius) : c.camera.position.distanceTo(c.target);
+  c.animateTo({ target, quaternion: orientation(d, up), distance }, VIEW_DURATION);
+}
+
 /** Tümüne sığdır (F) */
 export function fitAll() {
   viewerApi.fit('all');
