@@ -57,6 +57,8 @@ interface CommandUiState {
   planePick: boolean;
   /** Temel düzlemler sürekli görünsün (Görünüm menüsü) */
   showPlanes: boolean;
+  /** Az önce kurulan mate'in imleç yanındaki araç kutusu */
+  matePopup: { mateId: string; x: number; y: number } | null;
   set(p: Partial<Omit<CommandUiState, 'set' | 'closePopups'>>): void;
   closePopups(): void;
 }
@@ -73,6 +75,7 @@ export const useCommandUi = create<CommandUiState>()((set) => ({
   sketchSel: null,
   planePick: false,
   showPlanes: false,
+  matePopup: null,
   set: (p) => set(p),
   closePopups: () => set({ contextBox: null, contextMenu: null, sMenu: null }),
 }));

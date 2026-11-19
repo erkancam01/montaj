@@ -10,6 +10,7 @@ import { runCommand, startTool } from '@/ui/commands/commands';
 import { useCommandUi } from '@/ui/commands/commandStore';
 import { contextBoxItems, emptyMenu, partMenu, sMenuEntries } from '@/ui/commands/menus';
 import { PopupMenu } from '@/ui/commands/PopupMenu';
+import { MatePopup } from '@/ui/assembly/MatePopup';
 import '@/ui/commands/command.css';
 
 export function ContextUi() {
@@ -20,6 +21,7 @@ export function ContextUi() {
       <ContextBox />
       <ContextMenu />
       <SMenu />
+      <MatePopup />
     </>
   );
 }

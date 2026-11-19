@@ -21,7 +21,7 @@ import { useAssembly, type AssemblyState } from '@/state/useAssembly';
 import type { FaceRef } from '@/core/types';
 import { bodyIdOfFile, isBodyFileId } from '@/core/types';
 import { sketchRegions } from '@/ui/modeling/geom';
-import { useCommandUi, type BasePlaneKey, type LastCommand } from '@/ui/commands/commandStore';
+import { pointerState, useCommandUi, type BasePlaneKey, type LastCommand } from '@/ui/commands/commandStore';
 import { redoSketch, undoSketch } from '@/state/sketchSession';
 import { resetDraw } from '@/ui/sketch/tools';
 import { orientIso } from '@/ui/viewport/viewCommands';
@@ -381,6 +381,16 @@ export function startCommandWatchers() {
       });
     }
     if (ui.planePick && pk?.key !== SKETCH_PLANE_KEY && prev.modeling.pick?.key === SKETCH_PLANE_KEY) ui.set({ planePick: false });
+    // Mate aracı: yeni kurulan mate için imleç yanında tür kutusu; araç kapanınca / yeni seçim başlayınca kapanır
+    if (s.ui.tool === 'mate' && s.doc.mates !== prev.doc.mates && s.doc.mates.length > prev.doc.mates.length) {
+      const old = new Set(prev.doc.mates.map((m) => m.id));
+      const added = s.doc.mates.find((m) => !old.has(m.id));
+      if (added) ui.set({ matePopup: { mateId: added.id, x: pointerState.x, y: pointerState.y } });
+    }
+    if (ui.matePopup) {
+      const gone = !s.doc.mates.some((m) => m.id === ui.matePopup!.mateId);
+      if (s.ui.tool !== 'mate' || gone || (s.pendingFace && !prev.pendingFace)) ui.set({ matePopup: null });
+    }
     // Kip değişti: parça kipinde Unsurlar, montajda Montaj sekmesi
     if (!!s.modeling.activeBodyId !== !!prev.modeling.activeBodyId && !s.modeling.sketch) {
       ui.set({ tab: s.modeling.activeBodyId ? 'features' : 'assembly' });

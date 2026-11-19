@@ -65,6 +65,8 @@ export function ScenePointer() {
       // Görünüm küpü tıklamaları küpe aittir
       if (inViewCube(e.clientX, e.clientY)) return;
       down[e.button] = { x: e.clientX, y: e.clientY, moved: 0 };
+      pointerState.x = e.clientX;
+      pointerState.y = e.clientY;
       const ui = useCommandUi.getState();
       if (ui.contextBox || ui.contextMenu || ui.sMenu) ui.closePopups();
     };

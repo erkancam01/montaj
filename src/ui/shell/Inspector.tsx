@@ -164,6 +164,15 @@ export function NameField({ value, onCommit }: { value: string; onCommit(v: stri
 
 // ---------- panel ----------
 
+/** Sağ panelde gösterilecek bir şey var mı (yoksa masaüstünde panel gizlenir, görünüm genişler) */
+export function useInspectorHasContent(): boolean {
+  return useAssembly((s) => {
+    if (s.modeling.sketch || s.modeling.feature) return false;
+    if (s.mateSelection && s.ui.tool !== 'mate') return true;
+    return !!s.selection;
+  });
+}
+
 export function Inspector() {
   const selection = useAssembly((s) => s.selection);
   const multi = useAssembly((s) => s.extraSel.length > 0);
@@ -178,9 +187,7 @@ export function Inspector() {
         <span>Seçili nesne</span>
       </header>
       <div className="panel-body inspector">
-        {sketchOpen || featureOpen ? (
-          <CommandNote sketch={sketchOpen} />
-        ) : mateSelection && !mateTool ? (
+        {sketchOpen || featureOpen ? null : mateSelection && !mateTool ? (
           <MateInspector key={mateSelection} id={mateSelection} />
         ) : selection && multi ? (
           // Ek seçim varken birincil grup olsa bile çoklu panel
@@ -190,7 +197,7 @@ export function Inspector() {
         ) : selection ? (
           <SelectionProps key={`${selection.kind}:${selection.id}`} sel={{ kind: selection.kind, id: selection.id }} />
         ) : (
-          <Help />
+          <p className="empty-hint">Özelliklerini görmek için bir parça ya da mate seçin. Yardım: F1.</p>
         )}
       </div>
     </aside>
@@ -398,83 +405,4 @@ function SelectionProps({ sel }: { sel: ObjSel }) {
   );
 }
 
-/** Komut açıkken sağ panel: ayarlar solda */
-function CommandNote({ sketch }: { sketch: boolean }) {
-  return (
-    <div className="help">
-      <p className="help-lead">
-        {sketch ? 'Sketch ayarları' : 'Özellik ayarları'} soldaki komut panelinde. Onaylamak için ✓, vazgeçmek için ✕ (sahnenin sağ
-        üst köşesinde de var).
-      </p>
-      <ul className="help-list">
-        <li>
-          <kbd>S</kbd> imleç yanında sık kullanılan komutlar.
-        </li>
-        <li>
-          <kbd>Enter</kbd> {sketch ? "sketch'ten çık" : 'uygula'} · <kbd>Esc</kbd> {sketch ? 'aracı bırak' : 'iptal'}
-        </li>
-      </ul>
-    </div>
-  );
-}
 
-const SHORTCUTS: [string, string][] = [
-  ['S', 'Kısayol menüsü (imleç yanında)'],
-  ['Enter', 'Son komutu tekrarla · açık komutu onayla'],
-  ['Ctrl+tık', 'Seçime ekle / çıkar (Shift+tık da olur)'],
-  ['Ctrl+G', 'Seçili parçaları grupla'],
-  ['Ctrl+Shift+G', 'Grubu çöz'],
-  ['W', 'Taşı'],
-  ['E', 'Döndür'],
-  ['M', 'Mate aracı aç / kapa'],
-  ['Q', 'Dünya / Yerel eksen'],
-  ['F', 'Seçiliye odakla (yoksa tümü)'],
-  ['G', 'Zemine oturt'],
-  ['H', 'Gizle / göster'],
-  ['Del', 'Sil'],
-  ['Ctrl+D', 'Çoğalt'],
-  ['Ctrl+Z', 'Geri al'],
-  ['Ctrl+Y', 'Yinele'],
-  ['Esc', 'Seçimi kaldır · mate aracından çık'],
-];
-
-function Help() {
-  return (
-    <div className="help">
-      <p className="help-lead">Düzenlemek için sahnede ya da montaj ağacında bir parça seçin.</p>
-      <ul className="help-list">
-        <li>STEP, IGES veya BREP dosyalarını pencereye sürükleyin ya da “Dosya ekle”yi kullanın.</li>
-        <li>Sol tık: seç · çift tık (ağaçta): seç ve odakla.</li>
-        <li>
-          <kbd>Ctrl</kbd>/<kbd>Shift</kbd>+tık ile birden çok parça seçin; birlikte taşınır ve silinir.
-        </li>
-        <li>
-          Birlikte kalması gereken parçaları <kbd>Ctrl+G</kbd> ile gruplayın: grup gizmoda ve mate'lerde tek gövde gibi
-          davranır. Sahnede gruptaki parçaya tıklamak grubu seçer; tek parçayı ağaçtan seçebilirsiniz.
-        </li>
-        <li>Gizmo ile taşıyın / döndürün; değerleri buradan sayıyla da girebilirsiniz.</li>
-        <li>Sayı alanlarında ↑ / ↓ snap adımı kadar değiştirir.</li>
-        <li>
-          Bir yüzeye tıklayınca imleç yanında küçük araç kutusu çıkar: o yüzeyde Sketch, Mate ya da Gizle. Sağ tık
-          bağlama göre menü açar.
-        </li>
-        <li>
-          Parçaları bağlamak için <kbd>M</kbd> ile Mate aracını açın (Montaj sekmesi): önce yerinde kalacak referans
-          yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın. Mate'ler ağacın en altındaki klasördedir.
-        </li>
-        <li>Proje tarayıcıda otomatik saklanır; paylaşmak için .zip olarak kaydedin.</li>
-      </ul>
-      <div className="prop-title">Kısayollar</div>
-      <dl className="shortcut-list">
-        {SHORTCUTS.map(([k, d]) => (
-          <div key={k} className="shortcut">
-            <dt>
-              <kbd>{k}</kbd>
-            </dt>
-            <dd>{d}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}

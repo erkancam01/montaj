@@ -42,6 +42,8 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
 - Kullanıcının STEP dosyalarını (ör. `*.STEP` kökte) git'e ekleme.
 
 ## Bilinen eksikler / sıradaki fikirler
+- Arayüz: mate'ler ağaçta yalnız sondaki klasörde (bileşen altında değil); ağaçta geri alma çubuğu (rollback) yok;
+  Chrome Ctrl+N'yi çoğu zaman kendine ayırır (Dosya ▸ Yeni kullanılır).
 - Sketch: trim, teğet yay, spline yok (DXF spline/elips kısa çizgilerle yaklaşık gelir).
 - DXF ile gelen profil sabit geometridir (ext): taşımak için silip yeniden içe aktar. DWG okunmuyor.
 - Süpür: yol tek düzlemsel sketch zinciri. Düz kenarlı yol + gönyeli köşe → `miterBars` (kenar başına çıta,

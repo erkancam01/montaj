@@ -33,7 +33,7 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | `src/services/io/` | STEP okuma, proje kaydı (IndexedDB / .zip), dışa aktarma, dosya indirme |
 | `src/services/bodyManager.ts` | Çizilen parçaları değişince çekirdekte yeniden üretir, mate yüzlerini yeniden bulur |
 | `src/ui/theme/` | **Tema**: `tokens.css` (tüm renk/boyut değişkenleri), `styles.css` (genel stiller) |
-| `src/ui/shell/` | Ana iskelet: üst komut çubuğu, sol ağaç, sağ panel, katmanlar |
+| `src/ui/shell/` | Ana iskelet: menü çubuğu (`MenuBar`), üst komut çubuğu (`Toolbar`, kipe göre sekmeler), sol ağaç (`PartTree`: montaj ağacı / parça kipi unsur ağacı), sağ panel (seçim yoksa gizli), Yeni / Yardım pencereleri, yol işareti, dosya işlemleri (`fileActions`) |
 | `src/ui/commands/` | Komut eylemleri, sağ tık / S menüsü / bağlam kutusu, onay köşesi, klavye komutları |
 | `src/ui/icons/` | Tüm simgeler |
 | `src/ui/viewport/` | 3B sahne: kamera (fare şeması), parça çizimi, gizmo, sürükleme, görünüm küpü |
@@ -52,6 +52,9 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | Görünüm küpü | `src/ui/viewport/ViewCube.tsx` |
 | Üst komut çubuğu, sekmeler, düğmeler | `src/ui/shell/Toolbar.tsx` |
 | Sağ tık / S menüsü / bağlam kutusu girdileri | `src/ui/commands/menus.ts` |
+| Menü çubuğu girdileri (Dosya · Düzenle · …) | `src/ui/shell/MenuBar.tsx` |
+| Önce seç sonra komut (Sketch düzlemi, profil sketch'i), Yeni parça | `src/ui/commands/commands.ts` (`sketchCommand`, `preferredSketch`, `newPart`); seçim durumu `commandStore.ts` (`plane`, `face`, `sketchSel`) |
+| Mate tür kutusu (imleç yanında) | `src/ui/assembly/MatePopup.tsx` |
 | Bir özelliğin adı, varsayılan değerleri, tabloda görünen alanları, araç çubuğu açıklaması | `src/core/features/registry.ts` |
 | Bir özelliğin ayar formu | `src/ui/modeling/FeatureInspector.tsx` |
 | Bir özelliğin geometrisi (katı nasıl üretilir) | `src/services/kernel/build.ts` |

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Inspector } from '@/ui/shell/Inspector';
+import { Inspector, useInspectorHasContent } from '@/ui/shell/Inspector';
 import { Overlays } from '@/ui/shell/Overlays';
 import { PartTree } from '@/ui/shell/PartTree';
 import { Toolbar } from '@/ui/shell/Toolbar';
@@ -32,9 +32,10 @@ export function App() {
   const drawer = useMobileUi((s) => s.drawer);
   const sheetMin = useMobileUi((s) => s.sheetMin);
   const cmd = useCommandKind();
+  const insp = useInspectorHasContent();
 
   return (
-    <div className="app" data-drawer={drawer ?? undefined} data-cmd={cmd ?? undefined} data-sheet={cmd && sheetMin ? 'min' : undefined}>
+    <div className="app" data-drawer={drawer ?? undefined} data-cmd={cmd ?? undefined} data-sheet={cmd && sheetMin ? 'min' : undefined} data-insp={insp ? undefined : 'off'}>
       <Toolbar />
       <PartTree />
       <main className="viewport-box">

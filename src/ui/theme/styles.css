@@ -54,6 +54,17 @@ textarea {
   grid-column: 1 / -1;
 }
 
+/* Sağ panelde gösterilecek bir şey yoksa (seçim yok / komut solda) masaüstünde gizlenir */
+@media (min-width: 900px) {
+  .app[data-insp='off'] {
+    grid-template-columns: clamp(150px, 22vw, 270px) minmax(0, 1fr) 0;
+  }
+
+  .app[data-insp='off'] > .inspector-panel {
+    display: none;
+  }
+}
+
 .viewport-box {
   position: relative;
   min-width: 0;
