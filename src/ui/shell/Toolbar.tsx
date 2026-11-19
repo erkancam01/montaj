@@ -1,42 +1,41 @@
-// Üst komut çubuğu: solda Dosya menüsü + hızlı geri al/yinele, ortada sekmeler (Özellikler / Çizim / Montaj /
-// Değerlendir); her sekmede yalnız ilgili komutlar (simge + altında ad).
-import { useEffect, useRef, useState, type MouseEvent as RMouseEvent, type ReactNode, type RefObject } from 'react';
+// Üst komut çubuğu: solda menü çubuğu (Dosya · Düzenle · …) + hızlı geri al/yinele, ortada kipe göre sekmeler
+// (montajda Montaj / Sketch / Değerlendir, parça kipinde Unsurlar / Sketch / Değerlendir); her sekmede yalnız
+// ilgili komutlar (simge + altında ad).
+import { useEffect, useRef, type MouseEvent as RMouseEvent, type ReactNode, type RefObject } from 'react';
 import { useShallow } from 'zustand/react/shallow';
-import { downloadBlob } from '@/services/io/download';
 import { ACCEPT_ATTR } from '@/services/io/formats';
 import { selectedPartIds } from '@/core/assembly/rigid';
-import { exportProjectZip, newProject } from '@/services/io/session';
 import { viewerApi } from '@/services/viewerApi';
 import { enterBody, exitBody, finishSketch } from '@/state/modelingActions';
-import { exportAssemblyAsStep } from '@/services/io/exportAssemblyStep';
-import { redoSketch, undoSketch, useSketchUi } from '@/state/sketchSession';
+import { useSketchUi } from '@/state/sketchSession';
 import { groupSelection, ungroup } from '@/state/assemblyActions';
 import { useAssembly } from '@/state/useAssembly';
 import { isBodyFileId } from '@/core/types';
 import { CIcon, type CmdIconName } from '@/ui/icons/commandIcons';
 import {
   bodyCaps,
+  newPart,
+  redoAny,
   runCommand,
   selectedBodyId,
-  sketchOnFace,
-  sketchOnPlane,
-  newPartOnPlane,
+  sketchCommand,
   startTool,
   toggleMateTool,
   toolBlocker,
+  undoAny,
   type FeatureTool,
 } from '@/ui/commands/commands';
+import { MenuBar } from '@/ui/shell/MenuBar';
 import { useCommandUi, type CommandTab } from '@/ui/commands/commandStore';
-import { PopupMenu, type MenuEntry } from '@/ui/commands/PopupMenu';
 import { openParamsDialog } from '@/ui/params/ParamsDialog';
 import { selectedGroupId } from '@/ui/assembly/GroupList';
-import { importWithConfirm, isDocEmpty } from '@/ui/shell/importWithConfirm';
+import { importWithConfirm } from '@/ui/shell/importWithConfirm';
 import { IconGroup, IconMate, IconPlus, IconRedo, IconUndo, IconUngroup } from '@/ui/icons/icons';
 import { FIcon } from '@/ui/icons/featureIcons';
 import { confirmCancel, SKETCH_TOOLS, StatusPill } from '@/ui/sketch/SketchToolbar';
 import { openDxfImport } from '@/ui/sketch/DxfImportDialog';
 import { IconConstruction, ToolIcon } from '@/ui/icons/sketchIcons';
-import { chooseTool, constructionKey, resetDraw } from '@/ui/sketch/tools';
+import { chooseTool, constructionKey } from '@/ui/sketch/tools';
 import { FEATURE_TOOL_GROUPS, FEATURE_TOOLS } from '@/core/features/registry';
 import '@/ui/commands/command.css';
 
@@ -93,54 +92,11 @@ function FilePickerHost() {
   return <FileInput inputRef={inputRef} />;
 }
 
-/** Dosya seçiciyi açar */
-export function openFilePicker() {
-  window.dispatchEvent(new Event('app:add-files'));
-}
+export { openFilePicker, onNewProject, runExport, exportStep } from '@/ui/shell/fileActions';
+import { exportPng, openFilePicker } from '@/ui/shell/fileActions';
 
 function stepOptions(list: number[], current: number) {
   return list.includes(current) ? list : [...list, current].sort((a, b) => a - b);
-}
-
-async function runExport(make: () => Promise<Blob | null>, filename: string, emptyMsg: string) {
-  const { showToast } = useAssembly.getState();
-  try {
-    const blob = await make();
-    if (!blob || blob.size === 0) {
-      showToast(emptyMsg, 'error');
-      return;
-    }
-    downloadBlob(blob, filename);
-  } catch (err) {
-    console.error(err);
-    showToast(`Dışa aktarma başarısız: ${err instanceof Error ? err.message : String(err)}`, 'error');
-  }
-}
-
-async function exportStep() {
-  const { showToast } = useAssembly.getState();
-  try {
-    const { blob, warnings } = await exportAssemblyAsStep();
-    downloadBlob(blob, 'montaj.step');
-    if (warnings.length) {
-      const more = warnings.length > 2 ? ` (+${warnings.length - 2} uyarı)` : '';
-      showToast(`STEP uyarıları: ${warnings.slice(0, 2).join(' · ')}${more}`, 'error');
-      console.warn('STEP dışa aktarma uyarıları', warnings);
-    }
-  } catch (err) {
-    console.error(err);
-    showToast(`STEP dışa aktarma başarısız: ${err instanceof Error ? err.message : String(err)}`, 'error');
-  }
-}
-
-export async function onNewProject() {
-  if (!isDocEmpty() && !window.confirm('Mevcut proje temizlenecek. Devam edilsin mi?')) return;
-  try {
-    await newProject();
-  } catch (err) {
-    console.error(err);
-    useAssembly.getState().showToast('Yeni proje oluşturulamadı', 'error');
-  }
 }
 
 // ---------------------------------------------------------------- ortak düğme
@@ -181,75 +137,33 @@ export function CmdButton({ icon, label, title, onClick, disabled, active, sugge
 
 const Sep = () => <div className="cmd-sep" aria-hidden="true" />;
 
-// ---------------------------------------------------------------- sketch düzlemi menüsü
-
-const SKETCH_PLANE_KEY = 'sketch-plane';
-/** Yüzey seçimi "yeni parça" için mi başlatıldı */
-let planePickNewPart = false;
-
-function pickSketchFace(newPart: boolean) {
-  planePickNewPart = newPart;
-  useAssembly.getState().startPick({
-    key: SKETCH_PLANE_KEY,
-    kinds: ['face'],
-    filter: ['plane'],
-    multi: false,
-    prompt: 'Çizim için düz bir yüzey seçin (başka parçanın yüzü seçilirse sketch ona bağlanır)',
-  });
-}
-
-/** Düzlem seçim menüsü girdileri (Yeni parça ve Sketch düğmeleri) */
-function planeEntries(newPart: boolean, hasParts: boolean): MenuEntry[] {
-  const plane = (k: 'XY' | 'XZ' | 'YZ', label: string): MenuEntry => ({
-    label,
-    icon: 'plane',
-    onClick: () =>
-      runCommand(newPart ? `newpart-${k}` : `sketch-${k}`, newPart ? `Yeni parça (${k})` : `Sketch (${k})`, () =>
-        newPart ? newPartOnPlane(k) : sketchOnPlane(k),
-      ),
-  });
-  return [
-    { heading: newPart ? 'Yeni parça · çizim düzlemi' : 'Sketch düzlemi' },
-    ...(hasParts
-      ? [{ label: 'Bir parçanın yüzeyine çiz…', icon: 'pickPart', primary: true, onClick: () => pickSketchFace(newPart) } as MenuEntry, 'sep' as const]
-      : []),
-    plane('XY', 'Üst düzlem (XY)'),
-    plane('XZ', 'Ön düzlem (XZ)'),
-    plane('YZ', 'Sağ düzlem (YZ)'),
-  ];
-}
-
-/** Sketch düzlemi için yüzey seçildi → sketch başlat */
-function usePlanePick() {
-  const picked = useAssembly((s) => (s.modeling.pick?.key === SKETCH_PLANE_KEY ? s.modeling.pick.picked : null));
-  useEffect(() => {
-    if (!picked?.length) return;
-    const st = useAssembly.getState();
-    const t = picked[0];
-    st.endPick();
-    if (t.kind !== 'face') return;
-    sketchOnFace(t.ref, { newPart: planePickNewPart });
-  }, [picked]);
-}
-
 // ---------------------------------------------------------------- çubuk
 
 /** short: dar ekranda (mobile.css) gösterilen kısa etiket */
-const TABS: { id: CommandTab; label: string; short: string }[] = [
-  { id: 'features', label: 'Özellikler', short: 'Özellik' },
-  { id: 'sketch', label: 'Çizim', short: 'Çizim' },
-  { id: 'assembly', label: 'Montaj', short: 'Montaj' },
-  { id: 'evaluate', label: 'Değerlendir', short: 'Analiz' },
-];
+const TAB_DEFS: Record<CommandTab, { label: string; short: string }> = {
+  features: { label: 'Unsurlar', short: 'Unsur' },
+  sketch: { label: 'Sketch', short: 'Sketch' },
+  assembly: { label: 'Montaj', short: 'Montaj' },
+  evaluate: { label: 'Değerlendir', short: 'Analiz' },
+};
+
+/** Kipe göre sekmeler: parça kipinde Unsurlar, montajda Montaj */
+export function visibleTabs(partMode: boolean): CommandTab[] {
+  return partMode ? ['features', 'sketch', 'evaluate'] : ['assembly', 'sketch', 'evaluate'];
+}
 
 export function Toolbar() {
-  const tab = useCommandUi((s) => s.tab);
+  const partMode = useAssembly((s) => !!s.modeling.activeBodyId);
+  const tabs = visibleTabs(partMode);
+  const want = useCommandUi((s) => s.tab);
+  const tab = tabs.includes(want) ? want : tabs[0];
   const setTab = (t: CommandTab) => useCommandUi.getState().set({ tab: t });
-  usePlanePick();
+  const TABS = tabs.map((id) => ({ id, ...TAB_DEFS[id] }));
   return (
     <header className="toolbar cmdbar">
       <div className="cmd-top">
-        <FileMenu />
+        <MenuBar />
+        <FilePickerHost />
         <QuickAccess />
         <div className="cmd-tabs" role="tablist" aria-label="Komut sekmeleri">
           {TABS.map((t) => (
@@ -279,83 +193,6 @@ export function Toolbar() {
   );
 }
 
-function FileMenu() {
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const empty = useAssembly((s) => s.doc.instances.length === 0 && s.doc.files.length === 0);
-  const exportAs = async (what: string, fn: () => Promise<void>) => {
-    if (busy) return;
-    setBusy(what);
-    try {
-      await fn();
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <>
-      <button
-        type="button"
-        className={`cmd-file ${menu ? 'active' : ''}`}
-        aria-haspopup="menu"
-        aria-expanded={!!menu}
-        title="Dosya ve proje işlemleri"
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setMenu(menu ? null : { x: r.left, y: r.bottom + 2 });
-        }}
-      >
-        <CIcon name="menu" /> {busy ? 'Kaydediliyor…' : 'Dosya'}
-      </button>
-      {menu && (
-        <PopupMenu
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-          entries={[
-            { label: 'Yeni proje', icon: 'newDoc', onClick: () => void onNewProject() },
-            { label: 'Dosya ekle…', icon: 'addFile', title: 'STEP, IGES, BREP ya da proje .zip', onClick: openFilePicker },
-            { label: 'Parametreler…', icon: 'measure', title: 'Kullanıcı parametreleri tablosu', onClick: openParamsDialog },
-            'sep',
-            {
-              label: 'Projeyi kaydet (.zip)',
-              icon: 'zip',
-              disabled: empty || !!busy,
-              title: 'Projeyi kaynak dosyalarıyla birlikte .zip olarak indir',
-              onClick: () =>
-                void exportAs('zip', () => runExport(exportProjectZip, 'montaj-proje.zip', 'Kaydedilecek proje içeriği yok')),
-            },
-            { heading: 'Dışa aktar' },
-            {
-              label: 'STEP (.step)',
-              icon: 'export',
-              disabled: !!busy,
-              title: 'Tüm görünür montajı (çizilen ve içe aktarılan parçalar) STEP olarak dışa aktar',
-              onClick: () => void exportAs('step', exportStep),
-            },
-            {
-              label: 'GLB (.glb)',
-              icon: 'export',
-              disabled: empty || !!busy,
-              title: 'Görünür montajı GLB olarak dışa aktar',
-              onClick: () =>
-                void exportAs('glb', () => runExport(() => viewerApi.exportGLB(), 'montaj.glb', 'Dışa aktarılacak görünür parça yok')),
-            },
-            {
-              label: 'PNG ekran görüntüsü',
-              icon: 'camera',
-              disabled: !!busy,
-              onClick: () =>
-                void exportAs('png', () => runExport(() => viewerApi.screenshot(), 'montaj.png', 'Ekran görüntüsü alınamadı')),
-            },
-          ]}
-        />
-      )}
-      <FilePickerHost />
-    </>
-  );
-}
-
 /** Sol üstte geri al / yinele (sketch oturumunda sketch geçmişi) */
 function QuickAccess() {
   const sketchOpen = useAssembly((s) => !!s.modeling.sketch);
@@ -372,12 +209,7 @@ function QuickAccess() {
         disabled={!u}
         title={sketchOpen ? 'Sketch: geri al (Ctrl+Z)' : 'Geri al (Ctrl+Z)'}
         aria-label="Geri al"
-        onClick={() => {
-          if (sketchOpen) {
-            resetDraw();
-            undoSketch();
-          } else useAssembly.getState().undo();
-        }}
+        onClick={undoAny}
       >
         <IconUndo />
       </button>
@@ -387,12 +219,7 @@ function QuickAccess() {
         disabled={!r}
         title={sketchOpen ? 'Sketch: yinele (Ctrl+Y)' : 'Yinele (Ctrl+Y / Ctrl+Shift+Z)'}
         aria-label="Yinele"
-        onClick={() => {
-          if (sketchOpen) {
-            resetDraw();
-            redoSketch();
-          } else useAssembly.getState().redo();
-        }}
+        onClick={redoAny}
       >
         <IconRedo />
       </button>
@@ -420,30 +247,21 @@ export function runFeatureTool(tool: FeatureTool) {
   });
 }
 
-function useHasParts() {
-  return useAssembly((s) => s.doc.parts.some((p) => p.visible));
-}
+const PLANE_NAMES = { XY: 'Üst', XZ: 'Ön', YZ: 'Sağ' } as const;
 
-function PlaneMenuButton({ newPart, label, icon, title, disabled }: { newPart: boolean; label: string; icon: ReactNode; title: string; disabled?: boolean }) {
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const hasParts = useHasParts();
-  const picking = useAssembly((s) => s.modeling.pick?.key === SKETCH_PLANE_KEY);
+/** Sketch komutu: seçili düzlem / yüzeyde açılır, seçim yoksa düzlem bekler */
+function SketchButton({ disabled, title }: { disabled?: boolean; title?: string }) {
+  const picking = useCommandUi((s) => s.planePick);
+  const sel = useCommandUi((s) => (s.plane ? `${PLANE_NAMES[s.plane]} düzlem` : s.face ? 'seçili yüzey' : null));
   return (
-    <>
-      <CmdButton
-        icon={icon}
-        label={label}
-        title={title}
-        caret
-        disabled={disabled}
-        active={!!menu || (picking && planePickNewPart === newPart)}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setMenu(menu ? null : { x: r.left, y: r.bottom + 2 });
-        }}
-      />
-      {menu && <PopupMenu x={menu.x} y={menu.y} onClose={() => setMenu(null)} entries={planeEntries(newPart, hasParts)} />}
-    </>
+    <CmdButton
+      icon={<FIcon name="sketch" size={22} />}
+      label="Sketch"
+      title={title ?? (sel ? `Sketch: ${sel} üzerinde aç` : 'Sketch: bir düzlem (ağaçta Ön / Üst / Sağ) ya da düz bir yüzey seçin, sonra basın')}
+      disabled={disabled}
+      active={picking}
+      onClick={() => runCommand('sketch', 'Sketch', sketchCommand)}
+    />
   );
 }
 
@@ -451,43 +269,21 @@ function FeaturesTab() {
   const { activeBodyId, sketchOpen, featureOpen } = useAssembly(
     useShallow((s) => ({ activeBodyId: s.modeling.activeBodyId, sketchOpen: !!s.modeling.sketch, featureOpen: !!s.modeling.feature })),
   );
-  const selBody = useAssembly(selectedBodyId);
   const blockers = useAssembly(useShallow((s) => FEATURE_TOOLS.map((t) => toolBlocker(s, t.needs))));
   const suggestion = useCommandUi((s) => s.suggestion);
   return (
     <>
-      <PlaneMenuButton
-        newPart
-        label="Yeni parça"
-        icon={<CIcon name="newPart" size={22} />}
-        title={sketchOpen ? 'Sketch oturumu açıkken kullanılamaz' : 'Yeni parametrik parça oluştur ve çizim düzlemini seç'}
-        disabled={sketchOpen}
+      <CmdButton
+        icon={<CIcon name="done" size={22} />}
+        label="Montaja dön"
+        title={sketchOpen ? "Önce sketch'ten çıkın" : 'Parça düzenlemesini bitir, montaja dön (açık özellik iptal edilir)'}
+        disabled={sketchOpen || !activeBodyId}
+        onClick={() => exitBody()}
       />
-      {activeBodyId ? (
-        <CmdButton
-          icon={<CIcon name="done" size={22} />}
-          label="Düzenlemeyi bitir"
-          title={sketchOpen ? 'Önce sketch oturumunu bitirin' : 'Parça düzenlemesini bitir (açık özellik iptal edilir)'}
-          disabled={sketchOpen}
-          active
-          onClick={() => exitBody()}
-        />
-      ) : (
-        <CmdButton
-          icon={<CIcon name="editPart" size={22} />}
-          label="Parçayı düzenle"
-          title={selBody ? 'Seçili parçanın özellik geçmişini düzenle (sahnede çift tık da olur)' : 'Önce çizilmiş bir parça seçin'}
-          disabled={!selBody}
-          onClick={() => selBody && enterBody(selBody)}
-        />
-      )}
       <Sep />
-      <PlaneMenuButton
-        newPart={false}
-        label="Sketch"
-        icon={<FIcon name="sketch" size={22} />}
-        title={sketchOpen ? 'Sketch oturumu zaten açık' : featureOpen ? 'Önce açık özelliği bitirin' : 'Yeni sketch: çizim düzlemi seçin'}
+      <SketchButton
         disabled={sketchOpen || featureOpen}
+        title={sketchOpen ? 'Sketch oturumu zaten açık' : featureOpen ? 'Önce açık özelliği bitirin' : undefined}
       />
       <CmdButton
         icon={<span className="cmd-fx">ƒx</span>}
@@ -533,13 +329,7 @@ function SketchTab() {
           onClick={() => finishSketch()}
         />
       ) : (
-        <PlaneMenuButton
-          newPart={false}
-          label="Sketch"
-          icon={<FIcon name="sketch" size={22} />}
-          title={featureOpen ? 'Önce açık özelliği bitirin' : 'Yeni sketch: çizim düzlemi seçin'}
-          disabled={featureOpen}
-        />
+        <SketchButton disabled={featureOpen} title={featureOpen ? 'Önce açık özelliği bitirin' : undefined} />
       )}
       <Sep />
       {SKETCH_TOOLS.map((t) => (
@@ -598,22 +388,31 @@ function AssemblyTab() {
   const selCount = useAssembly((s) => selectedPartIds(s.doc, s.selection, s.extraSel).length);
   const groupId = useAssembly(selectedGroupId);
   const sketchOpen = useAssembly((s) => !!s.modeling.sketch);
+  const selBody = useAssembly(selectedBodyId);
   const mateTool = ui.tool === 'mate';
   const gizmoTitle = mateTool ? ' (Mate aracı açıkken gizmo kullanılmaz)' : '';
   return (
     <>
-      <AddFilesButton className="cmd-btn">
-        <span className="cmd-btn-icon">
-          <CIcon name="addFile" size={22} />
-        </span>
-        <span className="cmd-btn-label">Dosya ekle</span>
-      </AddFilesButton>
-      <PlaneMenuButton
-        newPart
-        label="Yeni parça"
-        icon={<CIcon name="newPart" size={22} />}
-        title="Montajda yeni parametrik parça çiz"
+      <CmdButton
+        icon={<CIcon name="addFile" size={22} />}
+        label="Bileşen ekle"
+        title="Montaja STEP / IGES / BREP dosyası ekle (Ctrl+O; sürükle-bırak da olur)"
         disabled={sketchOpen}
+        onClick={openFilePicker}
+      />
+      <CmdButton
+        icon={<CIcon name="newPart" size={22} />}
+        label="Yeni parça"
+        title="Montajda yeni parça modelle: parça kipine girer, ağaçta düzlem seçip Sketch'e basın"
+        disabled={sketchOpen}
+        onClick={() => runCommand('newpart', 'Yeni parça', newPart)}
+      />
+      <CmdButton
+        icon={<CIcon name="editPart" size={22} />}
+        label="Parçayı düzenle"
+        title={selBody ? 'Seçili parçanın unsur ağacını düzenle (sahnede ya da ağaçta çift tık da olur)' : 'Önce çizilmiş bir parça seçin'}
+        disabled={!selBody || sketchOpen}
+        onClick={() => selBody && enterBody(selBody)}
       />
       <Sep />
       <CmdButton
@@ -751,7 +550,7 @@ function EvaluateTab() {
     })),
   );
   const caps = useAssembly(useShallow((s) => bodyCaps(s, s.modeling.activeBodyId)));
-  const shot = () => void runExport(() => viewerApi.screenshot(), 'montaj.png', 'Ekran görüntüsü alınamadı');
+  const shot = () => void exportPng();
   const icon = (n: CmdIconName) => <CIcon name={n} size={22} />;
   return (
     <>

@@ -3,6 +3,8 @@
 import { create } from 'zustand';
 import type { FaceRef } from '@/core/types';
 
+export type BasePlaneKey = 'XY' | 'XZ' | 'YZ';
+
 export type CommandTab = 'features' | 'sketch' | 'assembly' | 'evaluate';
 
 /** Sahnede imlecin altındaki hedef (bağlam kutusu / sağ tık menüsü için) */
@@ -45,6 +47,16 @@ interface CommandUiState {
   /** Son komut (Enter tekrarlar) */
   last: LastCommand | null;
   suggestion: ExtrudeSuggestion | null;
+  /** Ağaçta / sahnede seçili temel düzlem (Sketch bu düzlemde açılır) */
+  plane: BasePlaneKey | null;
+  /** Son tıklanan düz yüzey (Sketch bu yüzeyde açılır) */
+  face: FaceRef | null;
+  /** Ağaçta seçili sketch (Ekstrüzyon vb. bu sketch'i kullanır) */
+  sketchSel: { bodyId: string; featureId: string } | null;
+  /** Sketch düzlemi bekleniyor: üç temel düzlem sahnede tıklanabilir gösterilir */
+  planePick: boolean;
+  /** Temel düzlemler sürekli görünsün (Görünüm menüsü) */
+  showPlanes: boolean;
   set(p: Partial<Omit<CommandUiState, 'set' | 'closePopups'>>): void;
   closePopups(): void;
 }
@@ -56,6 +68,11 @@ export const useCommandUi = create<CommandUiState>()((set) => ({
   sMenu: null,
   last: null,
   suggestion: null,
+  plane: null,
+  face: null,
+  sketchSel: null,
+  planePick: false,
+  showPlanes: false,
   set: (p) => set(p),
   closePopups: () => set({ contextBox: null, contextMenu: null, sMenu: null }),
 }));

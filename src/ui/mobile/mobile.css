@@ -251,6 +251,28 @@
     padding: 0 10px;
   }
 
+  /* Menü çubuğu tek ☰ düğmesinde */
+  .menubar {
+    flex: none;
+  }
+
+  .menubar-item {
+    display: none;
+  }
+
+  .menubar-burger {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 10px;
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .new-cards {
+    grid-template-columns: 1fr;
+  }
+
   .cmd-quick {
     flex: none;
     padding-right: 4px;

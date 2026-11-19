@@ -10,6 +10,8 @@ import { restoreSession } from '@/services/io/session';
 import { useAssembly } from '@/state/useAssembly';
 import { startBodyManager } from '@/services/bodyManager';
 import { ParamsDialog } from '@/ui/params/ParamsDialog';
+import { NewDialog } from '@/ui/shell/NewDialog';
+import { HelpDialog } from '@/ui/shell/HelpDialog';
 import { useCommandKind } from '@/ui/commands/CommandPanel';
 import { DrawerBackdrop, MobileDock } from '@/ui/mobile/MobileDock';
 import { useMobileUi } from '@/ui/mobile/mobileStore';
@@ -43,6 +45,8 @@ export function App() {
       <Inspector />
       <DrawerBackdrop />
       <ParamsDialog />
+      <NewDialog />
+      <HelpDialog />
     </div>
   );
 }

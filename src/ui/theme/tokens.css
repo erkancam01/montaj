@@ -41,6 +41,9 @@
 
   /* --- pencere / diyalog yüzeyleri --- */
   --dialog-bg: #1f242c;
+  /* Menü / liste satırı üzerine gelme zemini, viewport üstü yarı saydam kutu */
+  --hover-bg: rgba(255, 255, 255, 0.07);
+  --overlay-bg: rgba(22, 25, 29, 0.85);
   --input-bg: #151920;
   color-scheme: dark;
 }

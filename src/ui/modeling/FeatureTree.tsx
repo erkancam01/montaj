@@ -17,6 +17,7 @@ import { liveSourcesOf } from '@/core/modeling/refLocks';
 import type { Feature } from '@/core/types';
 import { IconEye, IconEyeOff } from '@/ui/icons/icons';
 import { PopupMenu } from '@/ui/commands/PopupMenu';
+import { useCommandUi } from '@/ui/commands/commandStore';
 import { featureIconName, FIcon } from '@/ui/icons/featureIcons';
 import '@/ui/modeling/modeling.css';
 
@@ -109,7 +110,7 @@ export function BodyFeatureList({ bodyId }: { bodyId: string }) {
     <div className="ft ft-inline" aria-label="Özellikler">
       <div className="ft-list" role="group" aria-label="Özellikler" tabIndex={0} onKeyDown={onKeyDown}>
         {features.length === 0 && !draftNew && !sketchNew && (
-          <div className="ft-empty">Henüz özellik yok. Çizim sekmesinden ya da bir yüzeye tıklayıp Sketch ile başlayın.</div>
+          <div className="ft-empty">Henüz unsur yok. Yukarıdan bir düzlem seçip Sketch'e basın.</div>
         )}
         {features.map((f, i) => (
           <FeatureRow
@@ -122,7 +123,11 @@ export function BodyFeatureList({ bodyId }: { bodyId: string }) {
             editing={editingId === f.id || sketchId === f.id}
             locked={locked}
             renaming={renaming === f.id}
-            onSelect={() => setSelected(f.id)}
+            onSelect={() => {
+              setSelected(f.id);
+              // Ekstrüzyon vb. seçili sketch'i kullanır (önce seç, sonra komut)
+              useCommandUi.getState().set({ sketchSel: f.type === 'sketch' ? { bodyId, featureId: f.id } : null, plane: null, face: null });
+            }}
             onEdit={() => edit(f)}
             onToggle={() => setFeatureSuppressed(bodyId, f.id, !f.suppressed)}
             onMove={(d) => moveFeature(bodyId, f.id, d)}

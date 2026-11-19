@@ -89,6 +89,15 @@ export function setStandardView(name: StandardView) {
   c.animateTo({ target, quaternion: q, distance }, VIEW_DURATION);
 }
 
+/** Hedefi ve uzaklığı koruyarak izometrik yöne döndürür (sketch'ten unsura geçerken önizleme görünsün) */
+export function orientIso() {
+  const c = controls;
+  if (!c) return;
+  const def = STANDARD_VIEWS.iso;
+  const q = orientation(vec(def.dir).normalize(), vec(def.up));
+  c.animateTo({ target: c.target.clone(), quaternion: q, distance: c.camera.position.distanceTo(c.target) }, VIEW_DURATION);
+}
+
 /**
  * Verilen yönden bakış (görünüm küpü: yüz, kenar ya da köşe). dir = hedeften kameraya (dünya, Z-yukarı).
  * Ekran-yukarısı +Z; tam üstten/alttan bakışta Üst/Alt standart görünümlerindeki gibi ±Y.

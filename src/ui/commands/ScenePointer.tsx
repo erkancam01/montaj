@@ -98,7 +98,13 @@ export function ScenePointer() {
       window.setTimeout(() => {
         if (gizmoBusy()) return;
         const hit = hitAt(x, y);
-        useCommandUi.getState().set({ contextBox: hit?.face ? { x, y, hit } : null });
+        // Son tıklanan düz yüzey: Sketch komutu (önce seç, sonra komut) bunu kullanır
+        useCommandUi.getState().set({
+          contextBox: hit?.face ? { x, y, hit } : null,
+          face: hit?.face && hit.planar ? hit.face : null,
+          plane: null,
+          sketchSel: null,
+        });
       }, 0);
     };
     const onContext = (e: MouseEvent) => {

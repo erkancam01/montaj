@@ -1,6 +1,7 @@
-// Sol panel. Normalde tek tasarım ağacı: montaj dosyaları → parçalar; çizilen parçalar açılınca özellik
-// geçmişi; en altta Gruplar ve Mate'ler klasörleri. Bir sketch / özellik / mate komutu açıkken ağacın yerine
-// o komutun ayarları (CommandPanel) gösterilir.
+// Sol panel. Montaj kipinde tasarım ağacı: montaj dosyaları → parçalar; çizilen parçalar açılınca unsur
+// geçmişi; en altta Gruplar ve Mate'ler klasörleri. Parça kipinde (bir parça düzenlenirken) yalnız o parçanın
+// unsur ağacı: Orijin, Ön / Üst / Sağ düzlemler, unsurlar. Bir sketch / özellik / mate komutu açıkken ağacın
+// yerine o komutun ayarları (CommandPanel) gösterilir.
 import { memo, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { geometryCache } from '@/core/geometry/geometryCache';
@@ -12,6 +13,9 @@ import { useAssembly } from '@/state/useAssembly';
 import type { Mate, Part } from '@/core/types';
 import { bodyIdOfFile, isBodyFileId } from '@/core/types';
 import { CommandPanel, useCommandPanelOpen } from '@/ui/commands/CommandPanel';
+import { pickBasePlane, runCommand, sketchCommand } from '@/ui/commands/commands';
+import { useCommandUi, type BasePlaneKey } from '@/ui/commands/commandStore';
+import { CIcon } from '@/ui/icons/commandIcons';
 import { commonPartEntries } from '@/ui/commands/menus';
 import { PopupMenu, type MenuEntry } from '@/ui/commands/PopupMenu';
 import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from '@/ui/assembly/GroupList';
@@ -123,7 +127,130 @@ type RowMenu = { x: number; y: number } | null;
 
 export function PartTree() {
   const open = useCommandPanelOpen();
-  return <aside className="panel tree-panel">{open ? <CommandPanel /> : <DesignTree />}</aside>;
+  const activeBodyId = useAssembly((s) => s.modeling.activeBodyId);
+  return (
+    <aside className="panel tree-panel">
+      {open ? <CommandPanel /> : activeBodyId ? <PartModeTree bodyId={activeBodyId} /> : <DesignTree />}
+    </aside>
+  );
+}
+
+const PLANE_ROWS: { k: BasePlaneKey; label: string }[] = [
+  { k: 'XZ', label: 'Ön Düzlem' },
+  { k: 'XY', label: 'Üst Düzlem' },
+  { k: 'YZ', label: 'Sağ Düzlem' },
+];
+
+/** Parça kipi: yalnız düzenlenen parçanın unsur ağacı */
+function PartModeTree({ bodyId }: { bodyId: string }) {
+  const body = useAssembly(
+    useShallow((s) => {
+      const b = s.doc.bodies.find((x) => x.id === bodyId);
+      const build = s.modeling.build[bodyId];
+      return {
+        name: b?.name ?? '',
+        buildState: build?.state,
+        nErr: build ? Object.keys(build.featureErrors).length : 0,
+        buildMsg: build?.message,
+        locked: !!s.modeling.sketch,
+      };
+    }),
+  );
+  const plane = useCommandUi((s) => s.plane);
+  const picking = useCommandUi((s) => s.planePick);
+  const [renaming, setRenaming] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number; k: BasePlaneKey } | null>(null);
+  return (
+    <>
+      <header className="panel-header">
+        <button type="button" className="tree-back" title="Parça düzenlemesini bitir, montaja dön" disabled={body.locked} onClick={() => exitBody()}>
+          ◀ Montaja dön
+        </button>
+        <span className="panel-meta">Parça</span>
+      </header>
+      <div className="panel-body tree utree" role="tree" aria-label="Unsur ağacı">
+        <div className="tree-row tree-instance tree-body editing" title="Çift tık: yeniden adlandır" onDoubleClick={() => setRenaming(true)}>
+          <span className="tree-kind-icon body" aria-hidden="true">
+            <FIcon name="body" size={14} />
+          </span>
+          {renaming ? (
+            <RenameInput
+              value={body.name}
+              onDone={(v) => {
+                setRenaming(false);
+                if (v !== null) renameBody(bodyId, v);
+              }}
+            />
+          ) : (
+            <span className="tree-name" title={body.name}>
+              {body.name}
+            </span>
+          )}
+          <BuildBadge state={body.buildState} nErr={body.nErr} message={body.buildMsg} />
+        </div>
+        <div role="group" className="tree-features">
+          <div className="tree-row tree-ref" title="Parçanın orijini (0, 0, 0)">
+            <span className="tree-kind-icon" aria-hidden="true">
+              <CIcon name="axes" size={14} />
+            </span>
+            <span className="tree-name">Orijin</span>
+          </div>
+          {PLANE_ROWS.map(({ k, label }) => (
+            <div
+              key={k}
+              role="treeitem"
+              aria-selected={plane === k}
+              className={`tree-row tree-ref ${plane === k ? 'selected' : ''} ${picking ? 'pickable' : ''}`}
+              title={picking ? `${label}: bu düzlemde sketch aç` : `${label}: seçip Sketch'e basın (çift tık: hemen sketch aç)`}
+              onClick={() => pickBasePlane(k)}
+              onDoubleClick={() => {
+                if (body.locked) return;
+                useCommandUi.getState().set({ plane: k });
+                runCommand('sketch', 'Sketch', sketchCommand);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                useCommandUi.getState().set({ plane: k, face: null, sketchSel: null });
+                setMenu({ x: e.clientX, y: e.clientY, k });
+              }}
+              {...longPressProps}
+            >
+              <span className="tree-kind-icon" aria-hidden="true">
+                <CIcon name="plane" size={14} />
+              </span>
+              <span className="tree-name">{label}</span>
+            </div>
+          ))}
+          <BodyFeatureList bodyId={bodyId} />
+        </div>
+      </div>
+      {menu && (
+        <PopupMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          entries={[
+            { heading: PLANE_ROWS.find((r) => r.k === menu.k)!.label },
+            {
+              label: 'Sketch',
+              icon: 'plane',
+              primary: true,
+              disabled: body.locked,
+              onClick: () => {
+                useCommandUi.getState().set({ plane: menu.k });
+                runCommand('sketch', 'Sketch', sketchCommand);
+              },
+            },
+            {
+              label: useCommandUi.getState().showPlanes ? 'Düzlemleri gizle' : 'Düzlemleri göster',
+              icon: 'show',
+              onClick: () => useCommandUi.getState().set({ showPlanes: !useCommandUi.getState().showPlanes }),
+            },
+          ]}
+        />
+      )}
+    </>
+  );
 }
 
 function DesignTree() {
@@ -138,7 +265,7 @@ function DesignTree() {
       </header>
       <div className="panel-body tree utree" role="tree" aria-label="Tasarım ağacı">
         {instanceIds.length === 0 ? (
-          <div className="empty-hint">Henüz parça yok. Dosya ekleyin ya da Özellikler › Yeni parça ile çizin.</div>
+          <div className="empty-hint">Henüz parça yok. Ekle ▸ Bileşen ile dosya ekleyin ya da Yeni parça ile modelleyin.</div>
         ) : (
           instanceIds.map((id) => <InstanceRow key={id} id={id} />)
         )}
@@ -490,7 +617,7 @@ function BodyRow({ instanceId, partId, bodyId, instanceVisible }: { instanceId: 
           entries={[
             { heading: body.name },
             body.active
-              ? { label: 'Düzenlemeyi bitir', icon: 'done', disabled: body.locked, onClick: () => exitBody() }
+              ? { label: 'Montaja dön', icon: 'done', disabled: body.locked, onClick: () => exitBody() }
               : { label: 'Parçayı düzenle', icon: 'editPart', disabled: body.locked, onClick: () => enterBody(bodyId) },
             { label: 'Yeniden adlandır', icon: 'rename', onClick: () => setRenaming(true) },
             { label: open ? 'Özellikleri gizle' : 'Özellikleri göster', onClick: () => setOpen((o) => !o) },

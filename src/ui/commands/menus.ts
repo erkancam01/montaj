@@ -9,7 +9,7 @@ import { confirmCancel, SKETCH_TOOLS } from '@/ui/sketch/SketchToolbar';
 import { chooseTool, constructionKey } from '@/ui/sketch/tools';
 import { tryApplyFeature } from '@/ui/modeling/FeatureInspector';
 import { FEATURE_TOOLS, openFilePicker, runFeatureTool } from '@/ui/shell/Toolbar';
-import { acceptMateSession, mateFromFace, newPartOnPlane, runCommand, sketchOnFace, sketchOnPlane, targetBodyId, toggleMateTool } from '@/ui/commands/commands';
+import { acceptMateSession, mateFromFace, newPart, runCommand, sketchCommand, sketchOnFace, targetBodyId, toggleMateTool } from '@/ui/commands/commands';
 import type { MenuEntry, MenuItem } from '@/ui/commands/PopupMenu';
 import { useCommandUi, type SceneHit } from '@/ui/commands/commandStore';
 import { createElement } from 'react';
@@ -105,7 +105,7 @@ export function partMenu(hit: SceneHit): MenuEntry[] {
   if (bodyId) {
     entries.push(
       s.modeling.activeBodyId === bodyId
-        ? { label: 'Düzenlemeyi bitir', icon: 'done', disabled: !!s.modeling.sketch, onClick: () => exitBody() }
+        ? { label: 'Montaja dön', icon: 'done', disabled: !!s.modeling.sketch, onClick: () => exitBody() }
         : { label: 'Parçayı düzenle', icon: 'editPart', disabled: busy, onClick: () => enterBody(bodyId) },
     );
   }
@@ -156,14 +156,14 @@ export function emptyMenu(): MenuEntry[] {
   const last = lastEntry();
   return [
     ...(last ? [last, 'sep' as const] : []),
-    { heading: 'Yeni parça' },
-    { label: 'Üst düzlemde (XY)', icon: 'newPart', onClick: () => runCommand('newpart-XY', 'Yeni parça (XY)', () => newPartOnPlane('XY')) },
-    { label: 'Ön düzlemde (XZ)', icon: 'newPart', onClick: () => runCommand('newpart-XZ', 'Yeni parça (XZ)', () => newPartOnPlane('XZ')) },
-    { label: 'Sağ düzlemde (YZ)', icon: 'newPart', onClick: () => runCommand('newpart-YZ', 'Yeni parça (YZ)', () => newPartOnPlane('YZ')) },
-    'sep',
-    { label: 'Dosya ekle…', icon: 'addFile', onClick: openFilePicker },
+    ...(s.modeling.activeBodyId
+      ? [{ label: 'Sketch', icon: sketchIcon(), onClick: () => runCommand('sketch', 'Sketch', sketchCommand) } as MenuItem]
+      : [
+          { label: 'Yeni parça', icon: 'newPart', onClick: () => runCommand('newpart', 'Yeni parça', newPart) } as MenuItem,
+          { label: 'Bileşen ekle…', icon: 'addFile', onClick: openFilePicker } as MenuItem,
+        ]),
     { label: 'Mate', icon: mateIcon(), hint: 'M', onClick: () => runCommand('mate', 'Mate', toggleMateTool) },
-    ...(s.modeling.activeBodyId ? [{ label: 'Düzenlemeyi bitir', icon: 'done', onClick: () => exitBody() } as MenuItem] : []),
+    ...(s.modeling.activeBodyId ? [{ label: 'Montaja dön', icon: 'done', onClick: () => exitBody() } as MenuItem] : []),
     'sep',
     {
       label: 'Tümünü göster',
@@ -221,10 +221,10 @@ export function sMenuEntries(): MenuEntry[] {
       }),
     );
     return [
-      { label: 'Sketch (XY)', icon: sketchIcon(), onClick: () => runCommand('sketch-XY', 'Sketch (XY)', () => sketchOnPlane('XY')) },
+      { label: 'Sketch', icon: sketchIcon(), onClick: () => runCommand('sketch', 'Sketch', sketchCommand) },
       ...feat,
       ...(s.modeling.activeBodyId
-        ? [{ label: 'Düzenlemeyi bitir', icon: 'done', onClick: () => exitBody() } as MenuItem]
+        ? [{ label: 'Montaja dön', icon: 'done', onClick: () => exitBody() } as MenuItem]
         : [{ label: 'Mate', icon: mateIcon(), onClick: () => runCommand('mate', 'Mate', toggleMateTool) } as MenuItem]),
     ];
   }
@@ -238,8 +238,8 @@ export function sMenuEntries(): MenuEntry[] {
     { label: 'Mate', icon: mateIcon(), hint: 'M', onClick: () => runCommand('mate', 'Mate', toggleMateTool) },
     { label: 'Taşı', icon: 'move', hint: 'W', onClick: () => runCommand('move', 'Taşı', () => st().setUi({ mode: 'translate', tool: 'select' })) },
     { label: 'Döndür', icon: 'rotate', hint: 'E', onClick: () => runCommand('rotate', 'Döndür', () => st().setUi({ mode: 'rotate', tool: 'select' })) },
-    { label: 'Yeni parça', icon: 'newPart', onClick: () => runCommand('newpart-XY', 'Yeni parça (XY)', () => newPartOnPlane('XY')) },
-    { label: 'Dosya ekle', icon: 'addFile', onClick: openFilePicker },
+    { label: 'Yeni parça', icon: 'newPart', onClick: () => runCommand('newpart', 'Yeni parça', newPart) },
+    { label: 'Bileşen ekle', icon: 'addFile', onClick: openFilePicker },
     { label: 'Grupla', icon: 'pickAssembly', hint: 'Ctrl+G', onClick: () => runCommand('group', 'Grupla', () => void groupSelection()) },
     { label: 'Sığdır', icon: 'fit', onClick: () => viewerApi.fit('all') },
     {

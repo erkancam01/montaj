@@ -4,6 +4,9 @@ import { viewerApi } from '@/services/viewerApi';
 import { selectedGroupId } from '@/ui/assembly/GroupList';
 import { duplicate, groupSelection, removeMate, removeSelection, toggleVisible, ungroup } from '@/state/assemblyActions';
 import { useAssembly } from '@/state/useAssembly';
+import { openNewDialog } from '@/ui/shell/NewDialog';
+import { openHelp } from '@/ui/shell/HelpDialog';
+import { openFilePicker, saveProjectZip } from '@/ui/shell/fileActions';
 
 const NON_TEXT_INPUTS = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'range', 'file']);
 
@@ -17,6 +20,30 @@ function isEditableTarget(t: EventTarget | null): boolean {
 
 export function useShortcuts() {
   useEffect(() => {
+    // Dosya kısayolları: tarayıcının kendi Ctrl+S / Ctrl+O davranışından önce (yakalama aşaması), sketch'te de
+    const onFileKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing || e.altKey) return;
+      if (e.key === 'F1') {
+        e.preventDefault();
+        openHelp();
+        return;
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      const k = e.key.toLowerCase();
+      const is = (l: string) => k === l || e.code === `Key${l.toUpperCase()}`;
+      if (is('s')) {
+        e.preventDefault();
+        void saveProjectZip();
+      } else if (is('o')) {
+        e.preventDefault();
+        openFilePicker();
+      } else if (is('n')) {
+        // Chrome Ctrl+N'yi çoğu zaman kendine ayırır; yakalanabildiği yerde Yeni penceresi
+        e.preventDefault();
+        openNewDialog();
+      }
+    };
+    window.addEventListener('keydown', onFileKey, true);
     const onKeyDown = (e: KeyboardEvent) => {
       // Sketch oturumunda klavye sketch arayüzüne aittir
       if (useAssembly.getState().modeling.sketch) return;
@@ -110,6 +137,9 @@ export function useShortcuts() {
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keydown', onFileKey, true);
+    };
   }, []);
 }

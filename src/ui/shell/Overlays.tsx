@@ -7,16 +7,18 @@ import { FACE_KIND_LABELS } from '@/core/assembly/mateMeta';
 import { useAssembly } from '@/state/useAssembly';
 import { importWithConfirm } from '@/ui/shell/importWithConfirm';
 import { IconClose, IconMate, IconPlus, IconUpload } from '@/ui/icons/icons';
+import { NewCards, startAssembly, startNewPart } from '@/ui/shell/NewDialog';
+import { Breadcrumb } from '@/ui/shell/Breadcrumb';
 import { AddFilesButton } from '@/ui/shell/Toolbar';
 import { SketchToolbar } from '@/ui/sketch/SketchToolbar';
 import { PickHint } from '@/ui/modeling/PickHint';
 import { ContextUi } from '@/ui/commands/ContextUi';
-import { BASE_PLANES, createBody, startSketch } from '@/state/modelingActions';
 
 export function Overlays() {
   return (
     <div className="overlays">
       <EmptyState />
+      <Breadcrumb />
       <JobList />
       <MateHint />
       <SketchToolbar />
@@ -28,47 +30,24 @@ export function Overlays() {
   );
 }
 
-const PLANES = [
-  ['XY', 'Üst (XY)'],
-  ['XZ', 'Ön (XZ)'],
-  ['YZ', 'Sağ (YZ)'],
-] as const;
-
-/** Boş sahneden doğrudan yeni parametrik parça + sketch başlatır */
-function drawNewPart(k: keyof typeof BASE_PLANES) {
-  const id = createBody();
-  startSketch(id, BASE_PLANES[k]);
-}
-
 function EmptyState() {
   const show = useAssembly((s) => s.doc.instances.length === 0 && s.jobs.length === 0);
   if (!show) return null;
   return (
     <div className="empty-state">
       <div className="empty-card">
-        <div className="empty-icon">
-          <IconUpload size={28} />
-        </div>
-        <div className="empty-title">STEP dosyalarınızı buraya sürükleyin</div>
-        <div className="empty-sub">veya bilgisayarınızdan seçin</div>
-        <AddFilesButton>
-          <IconPlus /> Dosya ekle
-        </AddFilesButton>
-        <div className="empty-formats">
-          Desteklenen: STEP (.step, .stp) · IGES (.iges, .igs) · BREP (.brep, .brp) · Proje (.zip)
-        </div>
+        <div className="empty-title">Başlamak için seçin</div>
+        <NewCards onPart={startNewPart} onAssembly={startAssembly} />
         <div className="empty-divider">
           <span>ya da</span>
         </div>
-        <div className="empty-title">Yeni parça çiz</div>
-        <div className="empty-sub">Çizime başlanacak düzlemi seçin</div>
-        <div className="empty-planes">
-          {PLANES.map(([k, label]) => (
-            <button key={k} type="button" className="btn" onClick={() => drawNewPart(k)}>
-              {label}
-            </button>
-          ))}
+        <div className="empty-icon">
+          <IconUpload size={24} />
         </div>
+        <div className="empty-sub">STEP / IGES / BREP dosyalarını ya da proje .zip'ini buraya sürükleyin</div>
+        <AddFilesButton>
+          <IconPlus /> Dosya aç
+        </AddFilesButton>
       </div>
     </div>
   );

@@ -9,6 +9,7 @@ import { Gizmo } from '@/ui/viewport/Gizmo';
 import { DragController } from '@/ui/viewport/DragController';
 import { Lights } from '@/ui/viewport/Lights';
 import { SceneContent } from '@/ui/viewport/SceneContent';
+import { BasePlanes } from '@/ui/viewport/BasePlanes';
 import { SceneGrid } from '@/ui/viewport/SceneGrid';
 import { gizmoBusy, inViewCube } from '@/ui/viewport/sceneRefs';
 import { SketchLayer } from '@/ui/sketch/SketchLayer';
@@ -62,6 +63,7 @@ export function Viewport() {
         <Lights />
         <SceneGrid />
         <SceneContent />
+        <BasePlanes />
         <FaceHighlights />
         <MateCursor />
         <Gizmo />
