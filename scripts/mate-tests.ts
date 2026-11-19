@@ -1,8 +1,8 @@
 // Mate çözücü + serbestlik analizi testleri. Çalıştırma: node scripts/run-ts.mjs scripts/mate-tests.ts
 import { Quaternion, Vector3 } from 'three';
-import { solveMates, type SolveOptions } from '../src/lib/mateSolver';
-import { partDofStates } from '../src/lib/dof';
-import type { Doc, FaceGeom, Instance, Mate, MateType, Part, Quat, Vec3 } from '../src/types';
+import { solveMates, type SolveOptions } from '../src/core/assembly/mateSolver';
+import { partDofStates } from '../src/core/assembly/dof';
+import type { Doc, FaceGeom, Instance, Mate, MateType, Part, Quat, Vec3 } from '../src/core/types';
 
 let failed = 0;
 let passed = 0;

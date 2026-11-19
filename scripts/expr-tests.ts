@@ -1,5 +1,5 @@
 // İfade değerlendirici testleri: npm run test:expr
-import { evalExpr, evalParams, exprRefs, isPlainNumber, renameInExpr, validParamName } from '../src/lib/expr';
+import { evalExpr, evalParams, exprRefs, isPlainNumber, renameInExpr, validParamName } from '../src/core/math/expr';
 
 let ok = 0;
 let fail = 0;

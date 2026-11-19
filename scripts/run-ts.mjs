@@ -10,6 +10,7 @@ if (!file) {
 const server = await createServer({
   configFile: false,
   logLevel: 'error',
+  resolve: { alias: { '@': resolve('src') } },
   appType: 'custom',
   server: { middlewareMode: true, hmr: false, ws: false },
   optimizeDeps: { noDiscovery: true, include: [] },

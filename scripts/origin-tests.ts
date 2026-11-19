@@ -1,8 +1,8 @@
 // Yüz kökeni (topolojik adlandırma) testleri. Çalıştırma: node scripts/run-ts.mjs scripts/origin-tests.ts
 // Çekirdek kullanılmaz: yüz geometrisi listesi sentetik verilir (getFaceGeom çıktısı biçiminde).
-import { computeFaceOrigins, originCandidates, sameOrigin } from '../src/modeling/faceOrigin';
-import { faceScore } from '../src/modeling/faceMatch';
-import type { ExtrudeFeature, FaceGeom, FaceOrigin, Feature, PlaneDef, RevolveFeature, SketchFeature, SkEntity, Vec3 } from '../src/types';
+import { computeFaceOrigins, originCandidates, sameOrigin } from '../src/core/modeling/faceOrigin';
+import { faceScore } from '../src/core/modeling/faceMatch';
+import type { ExtrudeFeature, FaceGeom, FaceOrigin, Feature, PlaneDef, RevolveFeature, SketchFeature, SkEntity, Vec3 } from '../src/core/types';
 
 let failed = 0;
 let passed = 0;
