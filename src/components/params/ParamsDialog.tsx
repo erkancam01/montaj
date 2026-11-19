@@ -2,12 +2,21 @@
 // Sketch ölçüleri, özellik alanları ve mate ofset/açıları bu adlara bağlanabilir; değer değişince bağlı her şey
 // (sketch → katı → mate'ler → montaj) güncellenir. "Alandan çıkınca uygula" açıkken her değişiklik hemen işlenir;
 // kapalıyken Tamam'da tek seferde. İptal, pencere açıldığından beri yapılanları geri alır.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import { downloadBlob } from '../../lib/download';
-import { evalParams, exprRefs, fmtValue, renameInExpr, validParamName } from '../../lib/expr';
+import {
+  evalParams,
+  exprRefs,
+  fmtValue,
+  isPlainNumber,
+  normalizeDecimal,
+  renameInExpr,
+  tryEvalExpr,
+  validParamName,
+} from '../../lib/expr';
 import { uid } from '../../lib/math';
-import { paramUsage, renameParamEverywhere } from '../../modeling/params';
+import { exprError, modelParams, paramUsage, renameParamEverywhere, updateModelParam, type ModelParam } from '../../modeling/params';
 import { useAssembly } from '../../store/useAssembly';
 import type { Doc, Param, ParamUnit } from '../../types';
 import './params.css';
@@ -133,6 +142,69 @@ function nextName(rows: readonly Row[]): string {
   return `P${n}`;
 }
 
+/** Model parametrelerini gövdeye göre gruplar (filtre: ad, ifade, özellik adı) */
+function modelGroups(models: readonly ModelParam[], q: string) {
+  const groups = new Map<string, { key: string; title: string; items: ModelParam[] }>();
+  for (const m of models) {
+    if (q && !`${m.name} ${m.expr ?? ''} ${m.ownerName} ${m.label} ${m.bodyName}`.toLocaleLowerCase('tr').includes(q)) continue;
+    let g = groups.get(m.bodyId);
+    if (!g) groups.set(m.bodyId, (g = { key: m.bodyId, title: m.bodyName, items: [] }));
+    g.items.push(m);
+  }
+  return [...groups.values()];
+}
+
+function ModelGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <tr className="pd-group">
+        <td colSpan={8}>{title}</td>
+      </tr>
+      {children}
+    </>
+  );
+}
+
+/** Odak dışına çıkınca / Enter'da değeri bildiren metin kutusu (Esc vazgeçer) */
+function CommitInput({ value, className, title, onCommit }: { value: string; className: string; title?: string; onCommit(v: string): void }) {
+  const [text, setText] = useState(value);
+  const [focus, setFocus] = useState(false);
+  const skip = useRef(false);
+  useEffect(() => {
+    if (!focus) setText(value);
+  }, [value, focus]);
+  return (
+    <input
+      className={className}
+      value={text}
+      title={title}
+      spellCheck={false}
+      onFocus={(e) => {
+        setFocus(true);
+        e.currentTarget.select();
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocus(false);
+        if (skip.current) {
+          skip.current = false;
+          setText(value);
+          return;
+        }
+        if (text.trim() !== value) onCommit(text);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        else if (e.key === 'Escape') {
+          e.stopPropagation();
+          skip.current = true;
+          e.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
 export function ParamsDialog() {
   const open = useParamsDialog((s) => s.open);
   if (!open) return null;
@@ -148,7 +220,61 @@ function Dialog() {
   const [dirty, setDirty] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const ev = useMemo(() => evalParams(rows), [rows]);
+  // Model parametreleri (sketch ölçüleri, özellik değerleri): belgeden canlı okunur, değişiklik hemen işlenir
+  const models = useMemo(() => modelParams(doc), [doc]);
+  const ev = useMemo(
+    () => evalParams([...rows, ...models.map((m) => ({ name: m.name, expr: m.expr ?? String(Number(m.value.toFixed(6))) }))]),
+    [rows, models],
+  );
+  const allNames = (except: string) => [...rows.map((r) => r.name), ...models.map((m) => m.name)].filter((n) => n !== except);
+
+  /** Model parametresini değiştirir (ad / ifade / değer); sketch hemen yeniden çözülür */
+  const changeModel = (mp: ModelParam, patch: { name?: string; text?: string }) => {
+    const st = useAssembly.getState();
+    if (patch.name !== undefined) {
+      const name = patch.name.trim();
+      if (name === mp.name) return;
+      const err = validParamName(name) ?? (allNames(mp.name).includes(name) ? 'Bu ad zaten var' : null);
+      if (err) {
+        st.showToast(`"${name}": ${err}`, 'error');
+        return;
+      }
+      st.commit((d) => updateModelParam(d, mp, { name }, renameInExpr) ?? d);
+      return;
+    }
+    const text = (patch.text ?? '').trim();
+    if (!text || text === (mp.expr ?? fmtValue(mp.value, 6))) return;
+    let value: number;
+    let expr: string | null;
+    if (isPlainNumber(text)) {
+      value = Number(normalizeDecimal(text));
+      expr = null;
+    } else {
+      // Kendi adını içeren ifade döngüdür
+      if (exprRefs(text).includes(mp.name)) {
+        st.showToast(`İfade "${mp.name}" adını kendisi kullanıyor (döngü).`, 'error');
+        return;
+      }
+      const r = tryEvalExpr(text, ev.values);
+      if ('error' in r) {
+        st.showToast(`İfade hatalı: ${r.error}`, 'error');
+        return;
+      }
+      value = r.value;
+      expr = text;
+    }
+    if ((mp.unit === 'mm' && mp.label !== 'Yatay mesafe' && mp.label !== 'Dikey mesafe' && value <= 0) || (mp.unit === 'adet' && value < 1)) {
+      st.showToast('Değer sıfırdan büyük olmalı.', 'error');
+      return;
+    }
+    let failed = false;
+    st.commit((d) => {
+      const nd = updateModelParam(d, mp, { expr, value }, renameInExpr);
+      if (!nd) failed = true;
+      return nd ?? d;
+    });
+    if (failed) st.showToast(`"${mp.ownerName}" bu değerle çözülemedi; değişiklik uygulanmadı.`, 'error');
+  };
   const usage = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of rows) m.set(r.id, paramUsage(doc, r.orig ?? r.name, exprRefs));
@@ -347,7 +473,9 @@ function Dialog() {
               </thead>
               <tbody>
                 {shown.map(({ r, i }) => {
-                  const nameErr = validParamName(r.name) ?? (rows.some((x) => x !== r && x.name === r.name) ? 'Bu ad zaten var' : null);
+                  const nameErr =
+                    validParamName(r.name) ??
+                    (rows.some((x) => x !== r && x.name === r.name) || models.some((m) => m.name === r.name) ? 'Bu ad zaten var' : null);
                   const err = ev.errors.get(r.name);
                   const val = ev.values.get(r.name);
                   return (
@@ -434,6 +562,77 @@ function Dialog() {
           <button type="button" className="btn pd-add" onClick={add}>
             + Parametre ekle
           </button>
+
+          <div className="pd-section">
+            Model parametreleri <span className="pd-count">{models.length}</span>
+          </div>
+          <p className="pd-help pd-help-sm">
+            Çizim ölçüleri ve özellik değerleri burada otomatik listelenir (d1, d2…). Değeri ya da ifadeyi değiştirin; parça,
+            ona bağlı mate'ler ve montaj güncellenir. Adı değiştirip başka ifadelerde kullanabilirsiniz (ör. <code>d2 = d1 / 2</code>).
+          </p>
+          <div className="pd-table-wrap">
+            <table className="pd-table pd-model">
+              <thead>
+                <tr>
+                  <th className="pd-c-icons" />
+                  <th>Ad</th>
+                  <th>Birim</th>
+                  <th>İfade</th>
+                  <th>Değer</th>
+                  <th>Nerede</th>
+                  <th className="pd-c-use" title="Kullanıldığı yer sayısı">Kullanım</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {modelGroups(models, q).map((g) => (
+                  <ModelGroup key={g.key} title={g.title}>
+                    {g.items.map((mp) => {
+                      const err = mp.expr ? ev.errors.get(mp.name) ?? exprError(mp.key) : undefined;
+                      const use = paramUsage(doc, mp.name, exprRefs);
+                      return (
+                        <tr key={mp.key} className={err ? 'pd-row-err' : ''}>
+                          <td className="pd-c-icons">{mp.expr ? <span className="expr-badge">ƒx</span> : null}</td>
+                          <td>
+                            <CommitInput
+                              className="pd-in pd-name"
+                              value={mp.name}
+                              title="Model parametresi adı (ifadelerde kullanılabilir)"
+                              onCommit={(t) => changeModel(mp, { name: t })}
+                            />
+                          </td>
+                          <td className="pd-unit-text">{unitLabel(mp.unit)}</td>
+                          <td>
+                            <CommitInput
+                              className={`pd-in pd-expr ${err ? 'err' : ''}`}
+                              value={mp.expr ?? fmtValue(mp.value, 6)}
+                              title={err ?? 'Sayı ya da ifade (ör. 1200, FFH - 2*KA, d1/2)'}
+                              onCommit={(t) => changeModel(mp, { text: t })}
+                            />
+                          </td>
+                          <td className="pd-val" title={err}>
+                            {err ? <span className="pd-err-text">{err}</span> : `${fmtValue(mp.value)} ${unitLabel(mp.unit)}`}
+                          </td>
+                          <td className="pd-where" title={`${mp.bodyName} › ${mp.ownerName} › ${mp.label}`}>
+                            {mp.ownerName} · {mp.label}
+                          </td>
+                          <td className="pd-c-use">{use || ''}</td>
+                          <td />
+                        </tr>
+                      );
+                    })}
+                  </ModelGroup>
+                ))}
+                {!models.length && (
+                  <tr>
+                    <td colSpan={8} className="pd-empty">
+                      Henüz ölçü yok. Bir parça çizip sketch'e ölçü (D) verdiğinizde burada otomatik görünür.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
         <div className="pd-foot">
           <button type="button" className="btn" onClick={onCancel} title="Pencere açıldığından beri yapılan değişiklikleri geri al">

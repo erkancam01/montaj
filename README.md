@@ -69,6 +69,10 @@ ilk girildiğinde arka planda yüklenir.
 - Tabloda bir değeri değiştirince bağlı sketch'ler yeniden çözülür, parçalar yeniden oluşur ve mate'ler yüzü
   kökeniyle (hangi özellik + hangi sketch çizgisi) yeniden bularak yerinde kalır. Tek geri al adımıdır.
 - CSV (Excel için `;`) ve JSON içe/dışa aktarma; İptal, pencere açıldığından beri yapılanları geri alır.
+- **Model parametreleri:** sketch ölçüleri ve özellik değerleri (extrude mesafesi, radyus, delik çapı, desen
+  adedi…) tabloda otomatik listelenir ve `d1, d2…` adını alır (parçaya göre gruplu). Değeri ya da ifadeyi
+  tablodan değiştirin; parça yeniden oluşur, mate'ler ve montaj güncellenir. Adı değiştirip ifadelerde
+  kullanabilirsiniz (ör. `d2 = d1 / 2`).
 
 ## Dışa aktarma
 

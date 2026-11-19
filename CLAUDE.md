@@ -34,6 +34,9 @@ Sahne Z-yukarı (`src/setup.ts`), birim mm. Proje tarayıcıda IndexedDB'de otom
 - Parametreler: `src/lib/expr.ts` (güvenli ifade değerlendirici), `src/modeling/params.ts` (applyParameters: her
   commit'te ifadeli sketch ölçüleri `SkConstraint.expr`, özellik alanları `Feature.exprs`, mate `offsetExpr/angleExpr`
   hesaplanır; değişen sketch başsız çözülür), `src/components/params/` (ParamsDialog, ExprField). `npm run test:expr`.
+  Model parametreleri: ölçülerde `SkConstraint.name`, özellik alanlarında `Feature.pnames` (assignModelNames her
+  commit'te d1, d2… atar); `modelParams(doc)`, `allParamLikes(doc)` (kullanıcı + model adları tek ifade grafiği),
+  `updateModelParam` (tablodan değişiklik; ölçüde sketch hemen çözülür).
 
 ## Çalışma kuralları
 - Kullanıcı her şeyin tek sohbette yürümesini istiyor: ayrı Claude oturumu açma; paralel iş gerekiyorsa bu

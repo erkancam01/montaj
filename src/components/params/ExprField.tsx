@@ -3,7 +3,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { evalParams, isPlainNumber, normalizeDecimal, tryEvalExpr, validParamName } from '../../lib/expr';
 import { uid } from '../../lib/math';
-import { exprError } from '../../modeling/params';
+import { allParamLikes, exprError } from '../../modeling/params';
 import { useAssembly } from '../../store/useAssembly';
 import type { ParamUnit } from '../../types';
 
@@ -27,7 +27,7 @@ export function resolveExprInput(text: string, current: number, unit: ParamUnit 
   let src = raw;
   if (src.startsWith('=')) {
     src = src.slice(1).trim();
-    const params = st.doc.parameters ?? [];
+    const params = allParamLikes(st.doc);
     if (!validParamName(src) && !params.some((p) => p.name === src)) {
       // "=YENI": mevcut değerle yeni parametre oluşturup bu alanı ona bağla
       const p = { id: uid(), name: src, unit, expr: fmt(current) };
@@ -36,7 +36,7 @@ export function resolveExprInput(text: string, current: number, unit: ParamUnit 
       return { value: current, expr: src };
     }
   }
-  const values = evalParams(st.doc.parameters ?? []).values;
+  const values = evalParams(allParamLikes(st.doc)).values;
   const r = tryEvalExpr(src, values);
   if ('error' in r) {
     const hint = /Bilinmeyen ad/.test(r.error) ? ' (Yeni parametre için "=AD" yazın ya da Parametreler tablosundan ekleyin.)' : '';

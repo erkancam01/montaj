@@ -366,7 +366,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const raw = fn(prev);
     if (raw === prev) return;
     // Parametreler: ifadeli ölçü/alanlar hesaplanan değerlerle güncellenir (aynı geri al adımında)
-    const changed = applyParameters(fixDefaults(prev, pruneBodies(cleanupGroups(prev, raw))));
+    const changed = applyParameters(prev, fixDefaults(prev, pruneBodies(cleanupGroups(prev, raw))));
     const { doc: next, mateStatus } = solve(prev, changed);
     const now = Date.now();
     const merge = !!mergeKey && lastMerge?.key === mergeKey && now - lastMerge.time < MERGE_WINDOW_MS;

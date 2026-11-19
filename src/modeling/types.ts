@@ -94,6 +94,8 @@ export interface SkConstraint {
   label?: Vec2;
   /** Ölçü ifadesi (ör. "FFH - 2*KA"); value son hesaplanan değerdir */
   expr?: string;
+  /** Model parametresi adı (ölçülerde otomatik d1, d2…; Parametreler tablosunda görünür, ifadelerde kullanılabilir) */
+  name?: string;
 }
 
 // ---------------------------------------------------------------- Özellikler
@@ -107,6 +109,8 @@ interface FeatureBase {
    * son hesaplanan sayıyı tutar; parametreler değişince applyParameters yeniden yazar.
    */
   exprs?: Record<string, string>;
+  /** Sayısal alanların model parametresi adları: alan adı → ad (otomatik d1, d2…) */
+  pnames?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------- Kullanıcı parametreleri
