@@ -519,19 +519,30 @@ export function addConstraint(
   return ok ? id : null;
 }
 
-/** Ölçü değerini değiştirir (çözülür) */
-export function setConstraintValue(id: string, value: number): boolean {
+/**
+ * Ölçü değerini değiştirir (çözülür). expr verilirse ölçü bu ifadeye (parametre tablosuna) bağlanır;
+ * verilmezse (düz sayı) varsa ifade bağı kaldırılır.
+ */
+export function setConstraintValue(id: string, value: number, expr?: string): boolean {
   const cur = currentSketch();
   const c = cur?.constraints.find((x) => x.id === id);
   if (!cur || !c) return false;
-  if (c.value === value) return true;
+  if (c.value === value && c.expr === expr) return true;
   if ((c.type === 'radius' || c.type === 'diameter' || c.type === 'distance') && value <= 0) {
     useAssembly.getState().showToast('Değer sıfırdan büyük olmalı.', 'error');
     return false;
   }
-  return applySketch((d) => ({ ...d, constraints: d.constraints.map((x) => (x.id === id ? { ...x, value } : x)) }), {
-    failMessage: 'Bu değerle çözüm bulunamadı; değişiklik geri alındı.',
-  });
+  return applySketch(
+    (d) => ({
+      ...d,
+      constraints: d.constraints.map((x) => {
+        if (x.id !== id) return x;
+        const { expr: _old, ...rest } = x;
+        return expr ? { ...rest, value, expr } : { ...rest, value };
+      }),
+    }),
+    { failMessage: 'Bu değerle çözüm bulunamadı; değişiklik geri alındı.' },
+  );
 }
 
 /** Ölçü etiketini taşır (çözülmez) */

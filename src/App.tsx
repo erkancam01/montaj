@@ -9,6 +9,7 @@ import { useCommandKeys } from './components/command/useCommandKeys';
 import { restoreSession } from './lib/session';
 import { useAssembly } from './store/useAssembly';
 import { startBodyManager } from './modeling/bodyManager';
+import { ParamsDialog } from './components/params/ParamsDialog';
 
 export function App() {
   useShortcuts();
@@ -31,6 +32,7 @@ export function App() {
         <Overlays />
       </main>
       <Inspector />
+      <ParamsDialog />
     </div>
   );
 }

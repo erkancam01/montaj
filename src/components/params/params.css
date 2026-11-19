@@ -1,0 +1,288 @@
+/* Parametreler penceresi ve ifade alanları */
+
+.pd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(8, 10, 14, 0.55);
+  pointer-events: auto;
+}
+
+.cmd-fx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 15px;
+  color: #b18cff;
+}
+
+.pd {
+  display: flex;
+  flex-direction: column;
+  width: min(1040px, 100%);
+  max-height: min(760px, 100%);
+  background: #1f242c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  color: var(--text, #e6e9ee);
+}
+
+.pd-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pd-fx {
+  font-style: italic;
+  font-weight: 700;
+  color: var(--accent-hover, #6b9bff);
+}
+
+.pd-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.pd-x {
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.pd-x:hover {
+  opacity: 1;
+}
+
+.pd-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pd-help {
+  margin: 0;
+  color: var(--text-dim, #a9b2be);
+  font-size: 12.5px;
+}
+
+.pd-help code {
+  background: rgba(255, 255, 255, 0.07);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+.pd-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.pd-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pd-filter {
+  flex: 1 1 200px;
+  min-width: 160px;
+  padding: 5px 8px;
+  background: #151920;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: inherit;
+}
+
+.pd-section {
+  margin-top: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim, #a9b2be);
+}
+
+.pd-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.pd-table-wrap {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+}
+
+.pd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.pd-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-dim, #a9b2be);
+  background: #1b2027;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.pd-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+.pd-row-err td {
+  background: rgba(229, 72, 77, 0.06);
+}
+
+.pd-c-icons {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.pd-c-use {
+  width: 1%;
+  text-align: center;
+  color: var(--text-dim, #a9b2be);
+}
+
+.pd-ic {
+  background: none;
+  border: 0;
+  padding: 2px 3px;
+  color: var(--text-dim, #a9b2be);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.pd-ic:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.pd-ic.on {
+  color: #f2c14e;
+}
+
+.pd-del {
+  font-size: 13px;
+}
+
+.pd-in {
+  width: 100%;
+  padding: 4px 6px;
+  background: #151920;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  color: inherit;
+  font: inherit;
+}
+
+.pd-in:focus {
+  outline: none;
+  border-color: var(--accent, #2f6fed);
+}
+
+.pd-in.err {
+  border-color: #e5484d;
+}
+
+.pd-name {
+  min-width: 90px;
+  font-weight: 600;
+}
+
+.pd-unit {
+  width: 72px;
+}
+
+.pd-expr {
+  min-width: 150px;
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+.pd-comment {
+  min-width: 110px;
+}
+
+.pd-val {
+  white-space: nowrap;
+  font-family: ui-monospace, Consolas, monospace;
+  color: #cfe3ff;
+}
+
+.pd-err-text {
+  color: #ff8a8e;
+  font-family: inherit;
+  white-space: normal;
+}
+
+.pd-empty {
+  padding: 18px !important;
+  text-align: center;
+  color: var(--text-dim, #a9b2be);
+}
+
+.pd-add {
+  align-self: flex-start;
+}
+
+.pd-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* İfade alanları */
+
+.expr-badge,
+.sk-dim-fx {
+  font-style: italic;
+  font-weight: 700;
+  color: #b18cff;
+  margin-right: 3px;
+}
+
+.expr-field.has-expr input {
+  color: #d9c8ff;
+}
+
+.expr-field.expr-err input {
+  border-color: #e5484d;
+  color: #ff8a8e;
+}
+
+.sk-crow-val.has-expr input {
+  color: #d9c8ff;
+}

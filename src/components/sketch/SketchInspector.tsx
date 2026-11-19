@@ -20,6 +20,7 @@ import {
   useSketchUi,
 } from '../../sketch/session';
 import { useAssembly } from '../../store/useAssembly';
+import { resolveExprInput } from '../params/ExprField';
 import { dimText } from './annotations';
 import { add, arcAngles, dist, fmt, isCurve, linePts, mul, norm, parseNum, pointMap, sub, v2 } from './geom';
 import { ConstraintIcon, IconCheck, IconSketch, IconTrash } from './sketchIcons';
@@ -500,7 +501,7 @@ function ConstraintRow({
 }
 
 function ValueInput({ c }: { c: SkConstraint }) {
-  const shown = fmt(c.value ?? 0, 3);
+  const shown = c.expr ?? fmt(c.value ?? 0, 3);
   const [text, setText] = useState(shown);
   const [focus, setFocus] = useState(false);
   const skip = useRef(false);
@@ -513,15 +514,18 @@ function ValueInput({ c }: { c: SkConstraint }) {
       setText(shown);
       return;
     }
-    const v = parseNum(text);
-    if (v === null) {
-      setText(shown);
-      return;
-    }
-    if (fmt(v, 3) !== shown && !setConstraintValue(c.id, v)) setText(shown);
+    if (text.trim() === shown) return;
+    // Sayı, ifade (FFH - 40) ya da "=AD" (yeni parametre)
+    const r = resolveExprInput(text, c.value ?? 0, c.type === 'angle' ? 'deg' : 'mm');
+    if (!r || !setConstraintValue(c.id, c.type === 'angle' ? r.value : Math.abs(r.value), r.expr)) setText(shown);
   };
   return (
-    <span className="sk-crow-val" onClick={(e) => e.stopPropagation()} title={dimText(c)}>
+    <span
+      className={`sk-crow-val ${c.expr ? 'has-expr' : ''}`}
+      onClick={(e) => e.stopPropagation()}
+      title={c.expr ? `${c.expr} = ${fmt(c.value ?? 0, 3)}` : dimText(c)}
+    >
+      {c.expr && <span className="expr-badge">ƒx</span>}
       <input
         value={text}
         inputMode="decimal"

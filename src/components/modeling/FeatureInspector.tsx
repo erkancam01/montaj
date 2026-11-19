@@ -31,6 +31,8 @@ import type {
   Vec3,
 } from '../../types';
 import { NameField, NumberField } from '../Inspector';
+import { ExprField } from '../params/ExprField';
+import { featureExprKey } from '../../modeling/params';
 import { IconClose } from '../icons';
 import { featureIconName, FIcon } from './featureIcons';
 import {
@@ -317,6 +319,7 @@ function Num({
   min,
   max,
   int,
+  field,
 }: {
   k: string;
   value: number;
@@ -326,7 +329,35 @@ function Num({
   min?: number;
   max?: number;
   int?: boolean;
+  /** Özellik alan adı: verilirse alan ifade (parametre) kabul eder ve draft.exprs'e yazar */
+  field?: string;
 }) {
+  const draft = useAssembly((s) => s.modeling.feature?.draft);
+  if (field && draft) {
+    const clamp = (v: number) => {
+      let x = int ? Math.round(v) : v;
+      if (min !== undefined) x = Math.max(min, x);
+      if (max !== undefined) x = Math.min(max, x);
+      return x;
+    };
+    return (
+      <ExprField
+        label={unit}
+        unit={unit === '°' ? 'deg' : unit === 'adet' ? 'adet' : 'mm'}
+        value={value}
+        expr={draft.exprs?.[field]}
+        step={step}
+        mergeKey={k}
+        errorKey={featureExprKey(draft.id, field)}
+        onCommit={({ value: v, expr }) => {
+          const exprs = { ...(draft.exprs ?? {}) };
+          if (expr) exprs[field] = expr;
+          else delete exprs[field];
+          updateFeatureDraft({ [field]: clamp(v), exprs: Object.keys(exprs).length ? exprs : undefined } as Partial<Feature>);
+        }}
+      />
+    );
+  }
   return (
     <NumberField
       label={unit}
@@ -496,12 +527,12 @@ function ExtrudeForm({ d, body }: { d: ExtrudeFeature; body: Body | undefined })
       )}
       {!d.throughAll && (
         <Field label={d.extent === 'twoSides' ? 'Mesafe 1' : d.extent === 'symmetric' ? 'Toplam' : 'Mesafe'}>
-          <Num k={`${k}:d`} value={d.distance} min={0} onChange={(v) => up({ distance: v })} />
+          <Num field="distance" k={`${k}:d`} value={d.distance} min={0} onChange={(v) => up({ distance: v })} />
         </Field>
       )}
       {!d.throughAll && d.extent === 'twoSides' && (
         <Field label="Mesafe 2">
-          <Num k={`${k}:d2`} value={d.distance2} min={0} onChange={(v) => up({ distance2: v })} />
+          <Num field="distance2" k={`${k}:d2`} value={d.distance2} min={0} onChange={(v) => up({ distance2: v })} />
         </Field>
       )}
       {d.extent !== 'symmetric' && (
@@ -559,7 +590,7 @@ function RevolveForm({ d, body }: { d: RevolveFeature; body: Body | undefined })
         </select>
       </Field>
       <Field label="Açı">
-        <Num k={`${k}:a`} unit="°" step={15} value={d.angle} min={0.1} max={360} onChange={(v) => up({ angle: v })} />
+        <Num field="angle" k={`${k}:a`} unit="°" step={15} value={d.angle} min={0.1} max={360} onChange={(v) => up({ angle: v })} />
       </Field>
       <Field label="">
         <Check label="Yönü çevir" checked={d.reverse} onChange={(v) => up({ reverse: v })} />
@@ -598,11 +629,11 @@ function EdgeFeatureForm({ d, bodyId }: { d: FilletFeature | ChamferFeature; bod
     <section className="prop-section">
       {d.type === 'fillet' ? (
         <Field label="Yarıçap">
-          <Num k={`${k}:r`} value={d.radius} step={0.5} min={0} onChange={(v) => up({ radius: v })} />
+          <Num field="radius" k={`${k}:r`} value={d.radius} step={0.5} min={0} onChange={(v) => up({ radius: v })} />
         </Field>
       ) : (
         <Field label="Mesafe">
-          <Num k={`${k}:d`} value={d.distance} step={0.5} min={0} onChange={(v) => up({ distance: v })} />
+          <Num field="distance" k={`${k}:d`} value={d.distance} step={0.5} min={0} onChange={(v) => up({ distance: v })} />
         </Field>
       )}
       <Field
@@ -749,33 +780,33 @@ function HoleForm({ d, bodyId }: { d: HoleFeature; bodyId: string }) {
           />
         </Field>
         <Field label="Çap">
-          <Num k={`${k}:dia`} value={d.diameter} step={0.5} min={0} onChange={(v) => up({ diameter: v })} />
+          <Num field="diameter" k={`${k}:dia`} value={d.diameter} step={0.5} min={0} onChange={(v) => up({ diameter: v })} />
         </Field>
         <Field label="">
           <Check label="Tümünden geç" checked={d.throughAll} onChange={(v) => up({ throughAll: v })} />
         </Field>
         {!d.throughAll && (
           <Field label="Derinlik">
-            <Num k={`${k}:dep`} value={d.depth} min={0} onChange={(v) => up({ depth: v })} />
+            <Num field="depth" k={`${k}:dep`} value={d.depth} min={0} onChange={(v) => up({ depth: v })} />
           </Field>
         )}
         {d.holeType === 'counterbore' && (
           <>
             <Field label="Havşa çapı">
-              <Num k={`${k}:cbd`} value={d.cbDiameter} step={0.5} min={0} onChange={(v) => up({ cbDiameter: v })} />
+              <Num field="cbDiameter" k={`${k}:cbd`} value={d.cbDiameter} step={0.5} min={0} onChange={(v) => up({ cbDiameter: v })} />
             </Field>
             <Field label="Havşa der.">
-              <Num k={`${k}:cbh`} value={d.cbDepth} step={0.5} min={0} onChange={(v) => up({ cbDepth: v })} />
+              <Num field="cbDepth" k={`${k}:cbh`} value={d.cbDepth} step={0.5} min={0} onChange={(v) => up({ cbDepth: v })} />
             </Field>
           </>
         )}
         {d.holeType === 'countersink' && (
           <>
             <Field label="Havşa çapı">
-              <Num k={`${k}:csd`} value={d.csDiameter} step={0.5} min={0} onChange={(v) => up({ csDiameter: v })} />
+              <Num field="csDiameter" k={`${k}:csd`} value={d.csDiameter} step={0.5} min={0} onChange={(v) => up({ csDiameter: v })} />
             </Field>
             <Field label="Havşa açısı">
-              <Num k={`${k}:csa`} unit="°" value={d.csAngle} step={1} min={1} max={179} onChange={(v) => up({ csAngle: v })} />
+              <Num field="csAngle" k={`${k}:csa`} unit="°" value={d.csAngle} step={1} min={1} max={179} onChange={(v) => up({ csAngle: v })} />
             </Field>
           </>
         )}
@@ -868,10 +899,10 @@ function LinearPatternForm({ d, body, bodyId }: { d: LinearPatternFeature; body:
         <div className="prop-title">Yön 1</div>
         <DirField label="Yön" dir={d.dir1} bodyId={bodyId} pickKey={PICK_KEYS.dir1} onChange={(v) => up({ dir1: v })} />
         <Field label="Adet">
-          <Num k={`${k}:c1`} unit="adet" value={d.count1} int min={1} max={500} onChange={(v) => up({ count1: v })} />
+          <Num field="count1" k={`${k}:c1`} unit="adet" value={d.count1} int min={1} max={500} onChange={(v) => up({ count1: v })} />
         </Field>
         <Field label="Aralık">
-          <Num k={`${k}:s1`} value={d.spacing1} onChange={(v) => up({ spacing1: v })} />
+          <Num field="spacing1" k={`${k}:s1`} value={d.spacing1} onChange={(v) => up({ spacing1: v })} />
         </Field>
       </section>
       <section className="prop-section">
@@ -880,10 +911,10 @@ function LinearPatternForm({ d, body, bodyId }: { d: LinearPatternFeature; body:
           <>
             <DirField label="Yön" dir={d.dir2} bodyId={bodyId} pickKey={PICK_KEYS.dir2} onChange={(v) => up({ dir2: v })} />
             <Field label="Adet">
-              <Num k={`${k}:c2`} unit="adet" value={d.count2} int min={1} max={500} onChange={(v) => up({ count2: v })} />
+              <Num field="count2" k={`${k}:c2`} unit="adet" value={d.count2} int min={1} max={500} onChange={(v) => up({ count2: v })} />
             </Field>
             <Field label="Aralık">
-              <Num k={`${k}:s2`} value={d.spacing2} onChange={(v) => up({ spacing2: v })} />
+              <Num field="spacing2" k={`${k}:s2`} value={d.spacing2} onChange={(v) => up({ spacing2: v })} />
             </Field>
           </>
         )}
@@ -960,10 +991,10 @@ function CircularPatternForm({ d, body, bodyId }: { d: CircularPatternFeature; b
           ))}
         </div>
         <Field label="Adet">
-          <Num k={`${k}:c`} unit="adet" value={d.count} int min={1} max={500} onChange={(v) => up({ count: v })} />
+          <Num field="count" k={`${k}:c`} unit="adet" value={d.count} int min={1} max={500} onChange={(v) => up({ count: v })} />
         </Field>
         <Field label="Toplam açı" hint={d.angle >= 360 ? 'Kopyalar çevreye eşit aralıkla dağılır.' : undefined}>
-          <Num k={`${k}:a`} unit="°" step={15} value={d.angle} min={0.1} max={360} onChange={(v) => up({ angle: v })} />
+          <Num field="angle" k={`${k}:a`} unit="°" step={15} value={d.angle} min={0.1} max={360} onChange={(v) => up({ angle: v })} />
         </Field>
       </section>
     </>

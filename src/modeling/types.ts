@@ -92,6 +92,8 @@ export interface SkConstraint {
   value?: number;
   /** Ölçü etiketinin sketch-2B konumu (yalnız görsel) */
   label?: Vec2;
+  /** Ölçü ifadesi (ör. "FFH - 2*KA"); value son hesaplanan değerdir */
+  expr?: string;
 }
 
 // ---------------------------------------------------------------- Özellikler
@@ -100,6 +102,25 @@ interface FeatureBase {
   id: string;
   name: string;
   suppressed: boolean;
+  /**
+   * İfadeli sayısal alanlar: alan adı → ifade (ör. { distance: 'FFH - 40' }). Alanın kendisi her zaman
+   * son hesaplanan sayıyı tutar; parametreler değişince applyParameters yeniden yazar.
+   */
+  exprs?: Record<string, string>;
+}
+
+// ---------------------------------------------------------------- Kullanıcı parametreleri
+
+export type ParamUnit = 'mm' | 'deg' | 'adet' | '';
+
+/** Parametre tablosu satırı. Değer saklanmaz: ifadeden hesaplanır (src/lib/expr.ts). */
+export interface Param {
+  id: string;
+  name: string;
+  unit: ParamUnit;
+  expr: string;
+  comment?: string;
+  fav?: boolean;
 }
 
 /**

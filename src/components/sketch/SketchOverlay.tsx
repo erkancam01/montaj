@@ -15,6 +15,7 @@ import {
   useSketchUi,
 } from '../../sketch/session';
 import { useAssembly } from '../../store/useAssembly';
+import { resolveExprInput } from '../params/ExprField';
 import { badgesOf, dimGeometry, type Badge, type DimGeom } from './annotations';
 import { fmt, parseNum, pointMap } from './geom';
 import { ConstraintIcon } from './sketchIcons';
@@ -174,15 +175,24 @@ const DimLabel = memo(function DimLabel({
         e.stopPropagation();
         useSketchUi.setState({ editing: c.id, sel: [c.id] });
       }}
-      title={`${constraintLabel(c.type)} — düzenlemek için çift tıklayın, taşımak için sürükleyin`}
+      title={`${constraintLabel(c.type)}${c.expr ? ` = ${c.expr}` : ''} — düzenlemek için çift tıklayın (sayı, ifade ya da =AD), taşımak için sürükleyin`}
     >
-      {editing ? <DimEditor c={c} /> : g.text}
+      {editing ? (
+        <DimEditor c={c} />
+      ) : c.expr ? (
+        <>
+          <span className="sk-dim-fx">ƒx</span>
+          {g.text}
+        </>
+      ) : (
+        g.text
+      )}
     </div>
   );
 });
 
 function DimEditor({ c }: { c: SkConstraint }) {
-  const [text, setText] = useState(() => fmt(c.value ?? 0, 4));
+  const [text, setText] = useState(() => c.expr ?? fmt(c.value ?? 0, 4));
   const input = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   useEffect(() => {
@@ -193,8 +203,13 @@ function DimEditor({ c }: { c: SkConstraint }) {
   const commit = () => {
     if (done.current) return;
     done.current = true;
-    const v = parseNum(text);
-    if (v !== null && v !== c.value) setConstraintValue(c.id, c.type === 'angle' ? v : Math.abs(v));
+    const t = text.trim();
+    if (t && t !== (c.expr ?? fmt(c.value ?? 0, 4))) {
+      // Sayı, ifade (FFH - 40) ya da "=AD" (yeni parametre)
+      const plain = parseNum(t);
+      const r = plain !== null && !c.expr ? { value: plain, expr: undefined } : resolveExprInput(t, c.value ?? 0, c.type === 'angle' ? 'deg' : 'mm');
+      if (r) setConstraintValue(c.id, c.type === 'angle' ? r.value : Math.abs(r.value), r.expr);
+    }
     close();
   };
   const unit = c.type === 'angle' ? '°' : 'mm';

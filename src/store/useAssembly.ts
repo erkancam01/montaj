@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { solveMates } from '../lib/mateSolver';
 import { cleanupGroups } from '../lib/rigid';
 import { lockedPartIds } from '../modeling/refLocks';
+import { applyParameters, warmupParamSolver } from '../modeling/params';
 import type {
   BodyBuildStatus,
   Doc,
@@ -364,7 +365,8 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const prev = get().doc;
     const raw = fn(prev);
     if (raw === prev) return;
-    const changed = fixDefaults(prev, pruneBodies(cleanupGroups(prev, raw)));
+    // Parametreler: ifadeli ölçü/alanlar hesaplanan değerlerle güncellenir (aynı geri al adımında)
+    const changed = applyParameters(fixDefaults(prev, pruneBodies(cleanupGroups(prev, raw))));
     const { doc: next, mateStatus } = solve(prev, changed);
     const now = Date.now();
     const merge = !!mergeKey && lastMerge?.key === mergeKey && now - lastMerge.time < MERGE_WINDOW_MS;
@@ -385,6 +387,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   replaceDoc: (doc) => {
     lastMerge = null;
     const d = normalizeDoc(doc);
+    if (d.parameters?.length) warmupParamSolver();
     set({
       doc: d,
       past: [],

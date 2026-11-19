@@ -7,7 +7,9 @@ import { useAssembly } from '../store/useAssembly';
 import type { FaceGeom, FaceRef, MateType, Part } from '../types';
 import { groupByPart } from './GroupList';
 import { IconSwap } from './icons';
-import { NameField, NumberField } from './Inspector';
+import { NameField } from './Inspector';
+import { ExprField } from './params/ExprField';
+import { mateExprKey } from '../modeling/params';
 import { mateStateOf, mateStateText, MateTypeIcon } from './MateList';
 
 /** Flip'in anlamlı olduğu tipler */
@@ -161,22 +163,27 @@ export function MateInspector({ id }: { id: string }) {
         {mate.type === 'coincident' && (
           <div className="prop-line">
             <span className="prop-label wide">Mesafe (mm)</span>
-            <NumberField
+            <ExprField
               value={mate.offset}
+              expr={mate.offsetExpr}
               step={snap ? snapMove : 1}
               mergeKey={`mate-offset:${id}`}
-              onCommit={(v) => updateMate(id, { offset: v })}
+              errorKey={mateExprKey(id, 'offset')}
+              onCommit={({ value, expr }) => updateMate(id, { offset: value, offsetExpr: expr })}
             />
           </div>
         )}
         {mate.type === 'angle' && (
           <div className="prop-line">
             <span className="prop-label wide">Açı (°)</span>
-            <NumberField
+            <ExprField
               value={mate.angle}
+              expr={mate.angleExpr}
+              unit="deg"
               step={snap ? snapAngle : 1}
               mergeKey={`mate-angle:${id}`}
-              onCommit={(v) => updateMate(id, { angle: clampAngle(v) })}
+              errorKey={mateExprKey(id, 'angle')}
+              onCommit={({ value, expr }) => updateMate(id, { angle: clampAngle(value), angleExpr: expr })}
             />
           </div>
         )}

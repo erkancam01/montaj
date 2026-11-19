@@ -28,6 +28,7 @@ import {
 } from './command/commands';
 import { useCommandUi, type CommandTab } from './command/commandStore';
 import { PopupMenu, type MenuEntry } from './command/PopupMenu';
+import { openParamsDialog } from './params/ParamsDialog';
 import { selectedGroupId } from './GroupList';
 import { importWithConfirm, isDocEmpty } from './importWithConfirm';
 import { IconGroup, IconMate, IconPlus, IconRedo, IconUndo, IconUngroup } from './icons';
@@ -310,6 +311,7 @@ function FileMenu() {
           entries={[
             { label: 'Yeni proje', icon: 'newDoc', onClick: () => void onNewProject() },
             { label: 'Dosya ekle…', icon: 'addFile', title: 'STEP, IGES, BREP ya da proje .zip', onClick: openFilePicker },
+            { label: 'Parametreler…', icon: 'measure', title: 'Kullanıcı parametreleri tablosu', onClick: openParamsDialog },
             'sep',
             {
               label: 'Projeyi kaydet (.zip)',
@@ -491,6 +493,12 @@ function FeaturesTab() {
         icon={<FIcon name="sketch" size={22} />}
         title={sketchOpen ? 'Sketch oturumu zaten açık' : featureOpen ? 'Önce açık özelliği bitirin' : 'Yeni sketch: çizim düzlemi seçin'}
         disabled={sketchOpen || featureOpen}
+      />
+      <CmdButton
+        icon={<span className="cmd-fx">ƒx</span>}
+        label="Parametreler"
+        title="Kullanıcı parametreleri tablosu: ölçüleri adlandırılmış değerlere bağlayın, tek yerden değiştirin"
+        onClick={openParamsDialog}
       />
       <Sep />
       {FEATURE_TOOLS.map((t, i) => (

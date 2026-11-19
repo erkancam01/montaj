@@ -62,9 +62,11 @@ export interface Doc {
   groups: Group[];
   /** Uygulamada çizilen parametrik gövdeler. Eski kayıtlarda olmayabilir; replaceDoc boş diziyle tamamlar. */
   bodies: Body[];
+  /** Kullanıcı parametreleri (Parametreler tablosu). Eski kayıtlarda yok. */
+  parameters?: Param[];
 }
 
-import type { Body } from './modeling/types';
+import type { Body, Param } from './modeling/types';
 export * from './modeling/types';
 
 // ---------------------------------------------------------------- Rijit gruplar
@@ -128,6 +130,9 @@ export interface Mate {
   offset: number;
   /** derece, yalnızca angle */
   angle: number;
+  /** offset / angle ifadeleri (parametre tablosuna bağlı) */
+  offsetExpr?: string;
+  angleExpr?: string;
   flip: boolean;
   /** Bastırılmış mate çözülmez */
   suppressed: boolean;
