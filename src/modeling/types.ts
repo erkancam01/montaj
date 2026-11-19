@@ -262,6 +262,18 @@ export interface Body {
   features: Feature[];
 }
 
+/**
+ * Gövde yüzünün kökeni (topolojik ad): yüzü üreten özellik ve (yan yüzlerde) sketch eğrisi ya da
+ * (kapaklarda) uzatmanın başlangıç/bitiş düzlemi. Parametre değişince yüz indeksleri kayar, köken kalır.
+ */
+export interface FaceOrigin {
+  featureId: string;
+  /** Yan yüzü üreten sketch eğrisi (çizgi/daire/yay) id'si */
+  entityId?: string;
+  /** Uzatma kapağı: start = sketch tarafı (iki yönlüde distance2 tarafı), end = distance tarafı */
+  cap?: 'start' | 'end';
+}
+
 /** Gövdenin montajdaki sanal dosya kimliği */
 export const bodyFileId = (bodyId: string) => `body:${bodyId}`;
 export const isBodyFileId = (fileId: string) => fileId.startsWith('body:');

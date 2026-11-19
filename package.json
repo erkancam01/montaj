@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
     "preview": "vite preview",
-    "test:mates": "node scripts/run-ts.mjs scripts/mate-tests.ts"
+    "test:mates": "node scripts/run-ts.mjs scripts/mate-tests.ts",
+    "test:origins": "node scripts/run-ts.mjs scripts/origin-tests.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

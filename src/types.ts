@@ -64,7 +64,7 @@ export interface Doc {
   bodies: Body[];
 }
 
-import type { Body } from './modeling/types';
+import type { Body, FaceOrigin } from './modeling/types';
 export * from './modeling/types';
 
 // ---------------------------------------------------------------- Rijit gruplar
@@ -104,6 +104,11 @@ export interface FaceRef {
   sig?: FaceGeom;
   /** sig ile birlikte: yüzey alanı (mm²); benzer yönlü yüzler arasında doğru olanı seçmek için */
   sigArea?: number;
+  /**
+   * Parametrik gövde yüzeylerinde: yüzü üreten özellik + sketch eğrisi (topolojik ad). Yeniden üretimde
+   * önce aynı kökenli yüz aranır; bulunamazsa sig ile eşlenir.
+   */
+  origin?: FaceOrigin;
 }
 
 /**
