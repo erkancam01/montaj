@@ -1,4 +1,4 @@
-// Sol panelin üstünde düzenlenen gövdenin özellik ağacı (geçmiş).
+// Birleşik ağaçta gövdenin özellik geçmişi (satırlar, sağ tık menüsü, dış referans bandı).
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -7,10 +7,8 @@ import {
   dependentsOf,
   editFeature,
   editSketch,
-  exitBody,
   FEATURE_LABELS,
   moveFeature,
-  renameBody,
   renameFeature,
   setFeatureSuppressed,
 } from '../../modeling/actions';
@@ -18,20 +16,18 @@ import { useAssembly } from '../../store/useAssembly';
 import { liveSourcesOf } from '../../modeling/refLocks';
 import type { Feature } from '../../types';
 import { IconEye, IconEyeOff } from '../icons';
-import { NameField } from '../Inspector';
+import { PopupMenu } from '../command/PopupMenu';
 import { featureIconName, FIcon } from './featureIcons';
 import './modeling.css';
 
-export function FeatureTree() {
-  const bodyId = useAssembly((s) => s.modeling.activeBodyId);
-  if (!bodyId) return null;
-  return <FeatureTreePanel key={bodyId} bodyId={bodyId} />;
-}
-
-function FeatureTreePanel({ bodyId }: { bodyId: string }) {
+/**
+ * Birleşik ağaçta bir gövdenin altındaki özellik geçmişi: satırlar (düzenle, bastır, sırala, sil, yeniden
+ * adlandır, sağ tık menüsü), oluşturulmakta olan taslak satırı ve canlı dış referans bandı.
+ */
+export function BodyFeatureList({ bodyId }: { bodyId: string }) {
   const body = useAssembly((s) => s.doc.bodies.find((b) => b.id === bodyId));
   const build = useAssembly((s) => s.modeling.build[bodyId]);
-  const { editingId, draftNew, sketchId, sketchNew } = useAssembly(
+  const { editingId, draftNew, sketchId, sketchNew, anySketch } = useAssembly(
     useShallow((s) => {
       const f = s.modeling.feature;
       const sk = s.modeling.sketch;
@@ -40,6 +36,7 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
         draftNew: f && f.bodyId === bodyId && f.isNew ? f.draft : null,
         sketchId: sk && sk.bodyId === bodyId ? sk.featureId : null,
         sketchNew: sk && sk.bodyId === bodyId && sk.isNew ? sk.data : null,
+        anySketch: !!sk,
       };
     }),
   );
@@ -58,6 +55,7 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
   );
   const [selected, setSelected] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; id: string } | null>(null);
 
   // Silinen özellik seçili kalmasın
   useEffect(() => {
@@ -67,8 +65,7 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
   if (!body) return null;
   const features = body.features;
   const errors = build?.featureErrors ?? {};
-  const nErr = Object.keys(errors).length;
-  const locked = !!sketchId;
+  const locked = anySketch;
 
   const onDelete = (f: Feature) => {
     const deps = dependentsOf(body, f.id);
@@ -82,6 +79,11 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
     deleteFeature(bodyId, f.id);
   };
 
+  const edit = (f: Feature) => {
+    if (f.type === 'sketch') editSketch(bodyId, f.id);
+    else editFeature(bodyId, f.id);
+  };
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!selected || renaming) return;
     const f = features.find((x) => x.id === selected);
@@ -92,38 +94,22 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
     } else if (e.key === 'Delete') {
       e.preventDefault();
       e.stopPropagation();
-      onDelete(f);
+      if (!locked) onDelete(f);
     } else if (e.key === 'Enter') {
       e.preventDefault();
+      e.stopPropagation();
       if (!locked) edit(f);
     }
   };
 
-  const edit = (f: Feature) => {
-    if (f.type === 'sketch') editSketch(bodyId, f.id);
-    else editFeature(bodyId, f.id);
-  };
+  const menuFeature = menu ? features.find((f) => f.id === menu.id) : undefined;
+  const menuIndex = menuFeature ? features.indexOf(menuFeature) : -1;
 
   return (
-    <section className="ft" aria-label="Özellik ağacı">
-      <div className="ft-head">
-        <span className="ft-body-icon">
-          <FIcon name="body" />
-        </span>
-        <div className="ft-name">
-          <NameField value={body.name} onCommit={(v) => renameBody(bodyId, v)} />
-        </div>
-        <BuildBadge state={build?.state} nErr={nErr} message={build?.message} />
-      </div>
-      <div
-        className="ft-list"
-        role="tree"
-        aria-label="Özellikler"
-        tabIndex={0}
-        onKeyDown={onKeyDown}
-      >
+    <div className="ft ft-inline" aria-label="Özellikler">
+      <div className="ft-list" role="group" aria-label="Özellikler" tabIndex={0} onKeyDown={onKeyDown}>
         {features.length === 0 && !draftNew && !sketchNew && (
-          <div className="ft-empty">Henüz özellik yok. Araç çubuğundan “Sketch” ile başlayın.</div>
+          <div className="ft-empty">Henüz özellik yok. Çizim sekmesinden ya da bir yüzeye tıklayıp Sketch ile başlayın.</div>
         )}
         {features.map((f, i) => (
           <FeatureRow
@@ -145,10 +131,14 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
               setRenaming(null);
               if (n !== null) renameFeature(bodyId, f.id, n);
             }}
+            onContextMenu={(x, y) => {
+              setSelected(f.id);
+              setMenu({ x, y, id: f.id });
+            }}
           />
         ))}
         {draftNew && (
-          <div className="ft-row draft editing" title="Oluşturuluyor: sağ panelden Uygula ya da İptal">
+          <div className="ft-row draft editing" title="Oluşturuluyor: sol panelden ✓ ya da ✕">
             <span className="ft-icon">
               <FIcon name={featureIconName(draftNew as Feature & { operation?: string })} />
             </span>
@@ -184,25 +174,39 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
           </button>
         </div>
       )}
-      <div className="ft-foot">
-        <span className="ft-count">
-          {features.length} özellik{nErr ? ` · ${nErr} hata` : ''}
-        </span>
-        <button
-          type="button"
-          className="btn btn-small btn-primary"
-          disabled={!!sketchId}
-          title={sketchId ? 'Önce sketch oturumunu bitirin' : 'Parça düzenlemesini bitir'}
-          onClick={() => exitBody()}
-        >
-          Bitir
-        </button>
-      </div>
-    </section>
+      {menu && menuFeature && (
+        <PopupMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          entries={[
+            { heading: menuFeature.name },
+            { label: 'Düzenle', icon: 'rename', disabled: locked, onClick: () => edit(menuFeature) },
+            {
+              label: menuFeature.suppressed ? 'Etkinleştir' : 'Bastır',
+              icon: menuFeature.suppressed ? 'show' : 'hide',
+              disabled: locked,
+              onClick: () => setFeatureSuppressed(bodyId, menuFeature.id, !menuFeature.suppressed),
+            },
+            { label: 'Yeniden adlandır', icon: 'rename', hint: 'F2', onClick: () => setRenaming(menuFeature.id) },
+            'sep',
+            { label: 'Yukarı taşı', disabled: locked || menuIndex <= 0, onClick: () => moveFeature(bodyId, menuFeature.id, -1) },
+            {
+              label: 'Aşağı taşı',
+              disabled: locked || menuIndex >= features.length - 1,
+              onClick: () => moveFeature(bodyId, menuFeature.id, 1),
+            },
+            'sep',
+            { label: 'Sil', icon: 'trash', danger: true, hint: 'Del', disabled: locked, onClick: () => onDelete(menuFeature) },
+          ]}
+        />
+      )}
+    </div>
   );
 }
 
-function BuildBadge({ state, nErr, message }: { state?: 'building' | 'ok' | 'error'; nErr: number; message?: string }) {
+/** Gövde satırında üretim durumu rozeti */
+export function BuildBadge({ state, nErr, message }: { state?: 'building' | 'ok' | 'error'; nErr: number; message?: string }) {
   if (state === 'building') {
     return (
       <span className="ft-build building" title="Geometri yeniden üretiliyor">
@@ -242,6 +246,7 @@ interface RowProps {
   onMove(d: -1 | 1): void;
   onDelete(): void;
   onRename(name: string | null): void;
+  onContextMenu(x: number, y: number): void;
 }
 
 function describe(f: Feature): string {
@@ -294,6 +299,11 @@ const FeatureRow = memo(function FeatureRow(p: RowProps) {
       onClick={p.onSelect}
       onDoubleClick={() => {
         if (!p.locked) p.onEdit();
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        p.onContextMenu(e.clientX, e.clientY);
       }}
     >
       <span className="ft-icon">
@@ -359,7 +369,7 @@ function RowBtn({
   );
 }
 
-function RenameInput({ value, onDone }: { value: string; onDone(v: string | null): void }) {
+export function RenameInput({ value, onDone }: { value: string; onDone(v: string | null): void }) {
   const ref = useRef<HTMLInputElement>(null);
   const done = useRef(false);
   useEffect(() => {

@@ -5,12 +5,14 @@ import { PartTree } from './components/PartTree';
 import { Toolbar } from './components/Toolbar';
 import { Viewport } from './components/viewport/Viewport';
 import { useShortcuts } from './hooks/useShortcuts';
+import { useCommandKeys } from './components/command/useCommandKeys';
 import { restoreSession } from './lib/session';
 import { useAssembly } from './store/useAssembly';
 import { startBodyManager } from './modeling/bodyManager';
 
 export function App() {
   useShortcuts();
+  useCommandKeys();
 
   useEffect(() => {
     startBodyManager();

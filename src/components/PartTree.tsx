@@ -1,14 +1,24 @@
+// Sol panel. Normalde tek tasarım ağacı: montaj dosyaları → parçalar; çizilen parçalar açılınca özellik
+// geçmişi; en altta Gruplar ve Mate'ler klasörleri. Bir sketch / özellik / mate komutu açıkken ağacın yerine
+// o komutun ayarları (CommandPanel) gösterilir.
 import { memo, useEffect, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { geometryCache } from '../lib/geometryCache';
+import { isPartFixed, usePartStatusMark } from '../lib/partStatus';
 import { viewerApi } from '../lib/viewerApi';
-import { clickPart, setVisible } from '../store/actions';
+import { enterBody, exitBody, renameBody } from '../modeling/actions';
+import { clickPart, rename, setVisible } from '../store/actions';
 import { useAssembly } from '../store/useAssembly';
 import type { Mate, Part } from '../types';
+import { bodyIdOfFile, isBodyFileId } from '../types';
+import { CommandPanel, useCommandPanelOpen } from './command/CommandPanel';
+import { commonPartEntries } from './command/menus';
+import { PopupMenu, type MenuEntry } from './command/PopupMenu';
 import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from './GroupList';
 import { IconChevron, IconEye, IconEyeOff, IconLink } from './icons';
 import { MateList } from './MateList';
-import { FeatureTree } from './modeling/FeatureTree';
+import { FIcon } from './modeling/featureIcons';
+import { BodyFeatureList, BuildBadge, RenameInput } from './modeling/FeatureTree';
 
 /** Parçaları otomatik kapalı başlatma eşiği */
 const COLLAPSE_THRESHOLD = 40;
@@ -97,27 +107,44 @@ function EyeButton({ visible, onToggle }: { visible: boolean; onToggle: () => vo
   );
 }
 
+/** Sabit (f) / eksik tanımlı (-) işareti */
+function StatusMark({ partId }: { partId: string }) {
+  const mark = usePartStatusMark(partId);
+  if (!mark) return null;
+  return (
+    <span className={`tree-mark ${mark === '(f)' ? 'fixed' : 'under'}`} title={mark === '(f)' ? 'Sabit' : 'Serbest (eksik bağlı)'}>
+      {mark}
+    </span>
+  );
+}
+
+type RowMenu = { x: number; y: number } | null;
+
 export function PartTree() {
+  const open = useCommandPanelOpen();
+  return <aside className="panel tree-panel">{open ? <CommandPanel /> : <DesignTree />}</aside>;
+}
+
+function DesignTree() {
   const instanceIds = useAssembly(useShallow((s) => s.doc.instances.map((i) => i.id)));
   const total = useAssembly((s) => s.doc.parts.length);
 
   return (
-    <aside className="panel tree-panel">
+    <>
       <header className="panel-header">
-        <span>Montaj ağacı</span>
+        <span>Tasarım ağacı</span>
         <span className="panel-meta">{total} parça</span>
       </header>
-      <FeatureTree />
-      <div className="panel-body tree" role="tree" aria-label="Montaj ağacı">
+      <div className="panel-body tree utree" role="tree" aria-label="Tasarım ağacı">
         {instanceIds.length === 0 ? (
-          <div className="empty-hint">Henüz parça yok</div>
+          <div className="empty-hint">Henüz parça yok. Dosya ekleyin ya da Özellikler › Yeni parça ile çizin.</div>
         ) : (
           instanceIds.map((id) => <InstanceRow key={id} id={id} />)
         )}
+        <GroupList />
+        <MateList />
       </div>
-      <GroupList />
-      <MateList />
-    </aside>
+    </>
   );
 }
 
@@ -131,6 +158,7 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
       const inInst = (pid: string) => idx.byId.get(pid)?.instanceId === id;
       return {
         name: inst?.name ?? '',
+        fileId: inst?.fileId ?? '',
         visible: inst?.visible ?? true,
         status: fs?.status,
         error: fs?.error,
@@ -142,6 +170,8 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
   );
   const partIds = useAssembly(useShallow((s) => partIndex(s.doc.parts).byInstance.get(id) ?? EMPTY_IDS));
   const [open, setOpen] = useState(() => partIds.length <= COLLAPSE_THRESHOLD);
+  const [renaming, setRenaming] = useState(false);
+  const [menu, setMenu] = useState<RowMenu>(null);
   const rowRef = useScrollIntoView(info.selected);
 
   // Seçili parça kapalı bir grubun içindeyse grubu aç (ki satırı görünsün)
@@ -149,9 +179,22 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
     if (info.containsSel) setOpen(true);
   }, [info.containsSel]);
 
+  // Çizilen parça: tek parçalı instance, özellik geçmişiyle birlikte gösterilir
+  if (isBodyFileId(info.fileId) && partIds.length === 1) {
+    return <BodyRow instanceId={id} partId={partIds[0]} bodyId={bodyIdOfFile(info.fileId)} instanceVisible={info.visible} />;
+  }
+
   const cls = ['tree-row', 'tree-instance', info.selected && 'selected', !info.visible && 'hidden-item']
     .filter(Boolean)
     .join(' ');
+
+  const entries: MenuEntry[] = [
+    { heading: info.name },
+    { label: info.visible ? 'Gizle' : 'Göster', icon: info.visible ? 'hide' : 'show', onClick: () => setVisible('instance', id, !info.visible) },
+    { label: 'Odakla', icon: 'focus', onClick: () => focusInstance(id) },
+    { label: 'Yeniden adlandır', icon: 'rename', onClick: () => setRenaming(true) },
+    { label: open ? 'Daralt' : 'Genişlet', onClick: () => setOpen((o) => !o) },
+  ];
 
   return (
     <div role="treeitem" aria-expanded={open} aria-selected={info.selected}>
@@ -160,6 +203,11 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
         className={cls}
         onClick={() => selectInstance(id)}
         onDoubleClick={() => focusInstance(id)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          selectInstance(id);
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
       >
         <button
           type="button"
@@ -174,9 +222,22 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
         >
           <IconChevron size={12} />
         </button>
-        <span className="tree-name" title={info.name}>
-          {info.name}
+        <span className="tree-kind-icon" aria-hidden="true">
+          <FIcon name="body" size={14} />
         </span>
+        {renaming ? (
+          <RenameInput
+            value={info.name}
+            onDone={(v) => {
+              setRenaming(false);
+              if (v !== null) rename('instance', id, v);
+            }}
+          />
+        ) : (
+          <span className="tree-name" title={info.name}>
+            {info.name}
+          </span>
+        )}
         {info.status === 'loading' && <span className="badge badge-loading">yükleniyor…</span>}
         {info.status === 'error' && (
           <span className="badge badge-error" title={info.error ?? 'Dosya ayrıştırılamadı'}>
@@ -195,12 +256,14 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
           ))}
         </div>
       )}
+      {menu && <PopupMenu x={menu.x} y={menu.y} entries={entries} onClose={() => setMenu(null)} />}
     </div>
   );
 });
 
-const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; parentVisible: boolean }) {
-  const info = useAssembly(
+/** Parça satırının ortak durum seçicisi */
+function usePartInfo(id: string) {
+  return useAssembly(
     useShallow((s) => {
       const p = partIndex(s.doc.parts).byId.get(id);
       const sel = s.selection;
@@ -224,41 +287,11 @@ const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; paren
       };
     }),
   );
-  const rowRef = useScrollIntoView(info.selected);
+}
 
-  const node = info.ready ? geometryCache.get(info.fileId)?.nodes[info.nodeKey] : undefined;
-  const title = node && node.path.length ? [...node.path, node.name].join(' / ') : info.name;
-  const dim = !info.visible || !parentVisible;
-  const cls = [
-    'tree-row',
-    'tree-part',
-    (info.selected || info.extra) && 'selected',
-    info.extra && 'extra',
-    !info.selected && !info.extra && info.groupSel && 'group-selected',
-    dim && 'hidden-item',
-  ]
-    .filter(Boolean)
-    .join(' ');
-
+function PartBadges({ info }: { info: ReturnType<typeof usePartInfo> }) {
   return (
-    <div
-      ref={rowRef}
-      role="treeitem"
-      aria-selected={info.selected || info.extra}
-      className={cls}
-      onClick={(e) => selectPartRow(id, isAdditive(e))}
-      onDoubleClick={(e) => {
-        if (!isAdditive(e)) focusPartRow(id);
-      }}
-    >
-      <span
-        className={`tree-swatch ${info.color ? '' : 'none'}`}
-        style={info.color ? { background: info.color } : undefined}
-        aria-hidden="true"
-      />
-      <span className="tree-name" title={title}>
-        {info.name}
-      </span>
+    <>
       {info.groupId && (
         <span
           className="tree-group-dot"
@@ -273,7 +306,195 @@ const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; paren
           <IconLink size={12} />
         </span>
       )}
-      <EyeButton visible={info.visible} onToggle={() => setVisible('part', id, !info.visible)} />
-    </div>
+    </>
+  );
+}
+
+function rowClass(info: ReturnType<typeof usePartInfo>, dim: boolean, extra: string) {
+  return [
+    'tree-row',
+    extra,
+    (info.selected || info.extra) && 'selected',
+    info.extra && 'extra',
+    !info.selected && !info.extra && info.groupSel && 'group-selected',
+    dim && 'hidden-item',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; parentVisible: boolean }) {
+  const info = usePartInfo(id);
+  const rowRef = useScrollIntoView(info.selected);
+  const [renaming, setRenaming] = useState(false);
+  const [menu, setMenu] = useState<RowMenu>(null);
+
+  const node = info.ready ? geometryCache.get(info.fileId)?.nodes[info.nodeKey] : undefined;
+  const title = node && node.path.length ? [...node.path, node.name].join(' / ') : info.name;
+  const dim = !info.visible || !parentVisible;
+
+  return (
+    <>
+      <div
+        ref={rowRef}
+        role="treeitem"
+        aria-selected={info.selected || info.extra}
+        className={rowClass(info, dim, 'tree-part')}
+        onClick={(e) => selectPartRow(id, isAdditive(e))}
+        onDoubleClick={(e) => {
+          if (!isAdditive(e)) focusPartRow(id);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (!info.selected && !info.extra) selectPartRow(id, false);
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        <span
+          className={`tree-swatch ${info.color ? '' : 'none'}`}
+          style={info.color ? { background: info.color } : undefined}
+          aria-hidden="true"
+        />
+        <StatusMark partId={id} />
+        {renaming ? (
+          <RenameInput
+            value={info.name}
+            onDone={(v) => {
+              setRenaming(false);
+              if (v !== null) rename('part', id, v);
+            }}
+          />
+        ) : (
+          <span className="tree-name" title={title}>
+            {info.name}
+          </span>
+        )}
+        <PartBadges info={info} />
+        <EyeButton visible={info.visible} onToggle={() => setVisible('part', id, !info.visible)} />
+      </div>
+      {menu && (
+        <PopupMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          entries={[
+            { heading: info.name },
+            { label: 'Yeniden adlandır', icon: 'rename', onClick: () => setRenaming(true) },
+            ...commonPartEntries(id, info.visible, isPartFixed(id)),
+          ]}
+        />
+      )}
+    </>
   );
 });
+
+/** Çizilen (parametrik) parça: açılınca özellik geçmişi */
+function BodyRow({ instanceId, partId, bodyId, instanceVisible }: { instanceId: string; partId: string; bodyId: string; instanceVisible: boolean }) {
+  const info = usePartInfo(partId);
+  const body = useAssembly(
+    useShallow((s) => {
+      const b = s.doc.bodies.find((x) => x.id === bodyId);
+      const build = s.modeling.build[bodyId];
+      return {
+        name: b?.name ?? info.name,
+        count: b?.features.length ?? 0,
+        active: s.modeling.activeBodyId === bodyId,
+        instSelected: s.selection?.kind === 'instance' && s.selection.id === instanceId,
+        buildState: build?.state,
+        nErr: build ? Object.keys(build.featureErrors).length : 0,
+        buildMsg: build?.message,
+        locked: !!s.modeling.sketch,
+      };
+    }),
+  );
+  const [open, setOpen] = useState(body.active);
+  const [renaming, setRenaming] = useState(false);
+  const [menu, setMenu] = useState<RowMenu>(null);
+  const selected = info.selected || body.instSelected;
+  const rowRef = useScrollIntoView(selected);
+
+  // Düzenlemeye girince özellikleri göster
+  useEffect(() => {
+    if (body.active) setOpen(true);
+  }, [body.active]);
+
+  const dim = !info.visible || !instanceVisible;
+  const cls = [rowClass(info, dim, 'tree-instance tree-body'), body.instSelected && 'selected', body.active && 'editing'].filter(Boolean).join(' ');
+  const visible = info.visible && instanceVisible;
+
+  return (
+    <div role="treeitem" aria-expanded={open} aria-selected={selected}>
+      <div
+        ref={rowRef}
+        className={cls}
+        title={body.active ? 'Düzenleniyor' : 'Çift tık: özellik geçmişini düzenle'}
+        onClick={(e) => selectPartRow(partId, isAdditive(e))}
+        onDoubleClick={() => {
+          if (!body.active && !body.locked) enterBody(bodyId);
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (!selected) selectPartRow(partId, false);
+          setMenu({ x: e.clientX, y: e.clientY });
+        }}
+      >
+        <button
+          type="button"
+          className={`tree-toggle ${open ? 'open' : ''}`}
+          aria-label={open ? 'Daralt' : 'Genişlet'}
+          title={open ? 'Özellikleri gizle' : 'Özellikleri göster'}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
+          onDoubleClick={(e) => e.stopPropagation()}
+        >
+          <IconChevron size={12} />
+        </button>
+        <span className="tree-kind-icon body" aria-hidden="true">
+          <FIcon name="body" size={14} />
+        </span>
+        <StatusMark partId={partId} />
+        {renaming ? (
+          <RenameInput
+            value={body.name}
+            onDone={(v) => {
+              setRenaming(false);
+              if (v !== null) renameBody(bodyId, v);
+            }}
+          />
+        ) : (
+          <span className="tree-name" title={body.name}>
+            {body.name}
+          </span>
+        )}
+        {body.active && <span className="tree-tag">düzenleniyor</span>}
+        <BuildBadge state={body.buildState} nErr={body.nErr} message={body.buildMsg} />
+        <PartBadges info={info} />
+        <EyeButton visible={visible} onToggle={() => setVisible('part', partId, !info.visible)} />
+      </div>
+      {open && (
+        <div role="group" className="tree-features">
+          <BodyFeatureList bodyId={bodyId} />
+        </div>
+      )}
+      {menu && (
+        <PopupMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          entries={[
+            { heading: body.name },
+            body.active
+              ? { label: 'Düzenlemeyi bitir', icon: 'done', disabled: body.locked, onClick: () => exitBody() }
+              : { label: 'Parçayı düzenle', icon: 'editPart', disabled: body.locked, onClick: () => enterBody(bodyId) },
+            { label: 'Yeniden adlandır', icon: 'rename', onClick: () => setRenaming(true) },
+            { label: open ? 'Özellikleri gizle' : 'Özellikleri göster', onClick: () => setOpen((o) => !o) },
+            'sep',
+            ...commonPartEntries(partId, info.visible, isPartFixed(partId)),
+          ]}
+        />
+      )}
+    </div>
+  );
+}

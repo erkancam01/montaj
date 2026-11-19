@@ -9,8 +9,6 @@ import type { ObjKind, Transform, Vec3 } from '../types';
 import { GroupInspector, MultiSelectionProps } from './GroupInspector';
 import { groupByPart, groupColor } from './GroupList';
 import { MateInspector } from './MateInspector';
-import { FeatureInspector } from './modeling/FeatureInspector';
-import { SketchInspector } from './sketch/SketchInspector';
 
 /** Dönüşümü doğrudan saklanan tek nesne seçimi (instance ya da parça) */
 type ObjSel = { kind: ObjKind; id: string };
@@ -172,17 +170,17 @@ export function Inspector() {
   const mateSelection = useAssembly((s) => s.mateSelection);
   const sketchOpen = useAssembly((s) => !!s.modeling.sketch);
   const featureOpen = useAssembly((s) => !!s.modeling.feature);
+  // Mate aracı açıkken seçili mate sol komut panelinde düzenlenir
+  const mateTool = useAssembly((s) => s.ui.tool === 'mate');
   return (
     <aside className="panel inspector-panel">
       <header className="panel-header">
-        <span>Özellikler</span>
+        <span>Seçili nesne</span>
       </header>
       <div className="panel-body inspector">
-        {sketchOpen ? (
-          <SketchInspector />
-        ) : featureOpen ? (
-          <FeatureInspector />
-        ) : mateSelection ? (
+        {sketchOpen || featureOpen ? (
+          <CommandNote sketch={sketchOpen} />
+        ) : mateSelection && !mateTool ? (
           <MateInspector key={mateSelection} id={mateSelection} />
         ) : selection && multi ? (
           // Ek seçim varken birincil grup olsa bile çoklu panel
@@ -400,7 +398,29 @@ function SelectionProps({ sel }: { sel: ObjSel }) {
   );
 }
 
+/** Komut açıkken sağ panel: ayarlar solda */
+function CommandNote({ sketch }: { sketch: boolean }) {
+  return (
+    <div className="help">
+      <p className="help-lead">
+        {sketch ? 'Sketch ayarları' : 'Özellik ayarları'} soldaki komut panelinde. Onaylamak için ✓, vazgeçmek için ✕ (sahnenin sağ
+        üst köşesinde de var).
+      </p>
+      <ul className="help-list">
+        <li>
+          <kbd>S</kbd> imleç yanında sık kullanılan komutlar.
+        </li>
+        <li>
+          <kbd>Enter</kbd> {sketch ? "sketch'ten çık" : 'uygula'} · <kbd>Esc</kbd> {sketch ? 'aracı bırak' : 'iptal'}
+        </li>
+      </ul>
+    </div>
+  );
+}
+
 const SHORTCUTS: [string, string][] = [
+  ['S', 'Kısayol menüsü (imleç yanında)'],
+  ['Enter', 'Son komutu tekrarla · açık komutu onayla'],
   ['Ctrl+tık', 'Seçime ekle / çıkar (Shift+tık da olur)'],
   ['Ctrl+G', 'Seçili parçaları grupla'],
   ['Ctrl+Shift+G', 'Grubu çöz'],
@@ -435,8 +455,12 @@ function Help() {
         <li>Gizmo ile taşıyın / döndürün; değerleri buradan sayıyla da girebilirsiniz.</li>
         <li>Sayı alanlarında ↑ / ↓ snap adımı kadar değiştirir.</li>
         <li>
-          Parçaları bağlamak için <kbd>M</kbd> ile Mate aracını açın: önce yerinde kalacak referans yüzeye, sonra
-          hareket edecek parçanın yüzeyine tıklayın. Mate'ler montaj ağacının altında listelenir.
+          Bir yüzeye tıklayınca imleç yanında küçük araç kutusu çıkar: o yüzeyde Sketch, Mate ya da Gizle. Sağ tık
+          bağlama göre menü açar.
+        </li>
+        <li>
+          Parçaları bağlamak için <kbd>M</kbd> ile Mate aracını açın (Montaj sekmesi): önce yerinde kalacak referans
+          yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın. Mate'ler ağacın en altındaki klasördedir.
         </li>
         <li>Proje tarayıcıda otomatik saklanır; paylaşmak için .zip olarak kaydedin.</li>
       </ul>

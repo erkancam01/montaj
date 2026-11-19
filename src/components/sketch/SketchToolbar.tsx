@@ -1,26 +1,23 @@
-// Sketch araç çubuğu (viewport üstünde): araçlar, ilişkiler, geri al/yinele, Bitir/İptal. DOM etiket katmanını da monte eder.
+// Sketch arayüzü parçaları: araç listesi ve çözücü durumu (komut çubuğunun Çizim sekmesi kullanır), viewport
+// üstündeki seçime uygun ilişki şeridi ve DOM etiket katmanı.
 import { useMemo } from 'react';
-import { finishSketch } from '../../modeling/actions';
 import type { SkConstraintType, SkEntity } from '../../modeling/types';
 import {
   addConstraint,
   applicableFor,
   constraintLabel,
   isDimension,
-  redoSketch,
-  undoSketch,
   useSketchUi,
   type SketchTool,
 } from '../../sketch/session';
 import { useAssembly } from '../../store/useAssembly';
-import { IconRedo, IconUndo } from '../icons';
-import { ConstraintIcon, IconCheck, IconConstruction, ToolIcon } from './sketchIcons';
+import { ConstraintIcon } from './sketchIcons';
 import { SketchOverlay } from './SketchOverlay';
-import { cancelAll, chooseTool, constructionKey, resetDraw } from './tools';
+import { cancelAll } from './tools';
 import './sketch.css';
 
-const TOOLS: { tool: SketchTool; label: string; key: string; title: string }[] = [
-  { tool: 'select', label: 'Seç', key: 'S', title: 'Seç ve sürükle (kutu seçimi: soldan sağa tam içerilen, sağdan sola kesişen)' },
+export const SKETCH_TOOLS: { tool: SketchTool; label: string; key: string; title: string }[] = [
+  { tool: 'select', label: 'Seç', key: 'Esc', title: 'Seç ve sürükle (kutu seçimi: soldan sağa tam içerilen, sağdan sola kesişen)' },
   { tool: 'line', label: 'Çizgi', key: 'L', title: 'Çizgi zinciri (Esc / sağ tık / Enter bitirir; sayı yazarak uzunluk girin)' },
   { tool: 'rect', label: 'Dikdörtgen', key: 'R', title: 'İki köşeli dikdörtgen (sayı yazarak genişlik × yükseklik girin)' },
   { tool: 'rectCenter', label: 'Merkez dikd.', key: '⇧R', title: 'Merkez ve köşeden dikdörtgen' },
@@ -43,90 +40,9 @@ export function SketchToolbar() {
     <>
       <SketchOverlay />
       <div className="sk-toolbar-wrap">
-        <Bar />
         <Relations />
       </div>
     </>
-  );
-}
-
-function Bar() {
-  const tool = useSketchUi((s) => s.tool);
-  const canUndo = useSketchUi((s) => s.canUndo);
-  const canRedo = useSketchUi((s) => s.canRedo);
-  const construction = useSketchUi((s) => s.construction);
-  const name = useAssembly((s) => s.modeling.sketch?.data.name ?? 'Sketch');
-  return (
-    <div className="sk-toolbar" role="toolbar" aria-label="Sketch araçları" onPointerDown={(e) => e.stopPropagation()}>
-      <div className="sk-title" title={name}>
-        <span className="sk-title-dot" />
-        {name}
-      </div>
-      <div className="sk-sep" />
-      <div className="sk-group">
-        {TOOLS.map((t) => (
-          <button
-            key={t.tool}
-            type="button"
-            className={`sk-tool ${tool === t.tool ? 'active' : ''}`}
-            title={`${t.title} [${t.key}]`}
-            aria-pressed={tool === t.tool}
-            onClick={() => chooseTool(t.tool)}
-          >
-            <ToolIcon tool={t.tool} />
-            <span className="sk-tool-label">{t.label}</span>
-            <kbd>{t.key}</kbd>
-          </button>
-        ))}
-      </div>
-      <div className="sk-sep" />
-      <button
-        type="button"
-        className={`sk-tool ${construction ? 'active' : ''}`}
-        title="Yardımcı geometri: seçili eğrileri yardımcı yap / seçim yoksa yeni çizimler için yardımcı kipi aç-kapa [X]"
-        aria-pressed={construction}
-        onClick={constructionKey}
-      >
-        <IconConstruction />
-        <span className="sk-tool-label">Yardımcı</span>
-        <kbd>X</kbd>
-      </button>
-      <div className="sk-sep" />
-      <button
-        type="button"
-        className="sk-icon-btn"
-        title="Geri al [Ctrl+Z]"
-        aria-label="Geri al"
-        disabled={!canUndo}
-        onClick={() => {
-          resetDraw();
-          undoSketch();
-        }}
-      >
-        <IconUndo />
-      </button>
-      <button
-        type="button"
-        className="sk-icon-btn"
-        title="Yinele [Ctrl+Y]"
-        aria-label="Yinele"
-        disabled={!canRedo}
-        onClick={() => {
-          resetDraw();
-          redoSketch();
-        }}
-      >
-        <IconRedo />
-      </button>
-      <div className="sk-sep" />
-      <StatusPill />
-      <button type="button" className="btn btn-ghost sk-cancel" title="Değişiklikleri at ve çık" onClick={confirmCancel}>
-        İptal
-      </button>
-      <button type="button" className="btn btn-primary sk-finish" title="Sketch'i bitir [Enter]" onClick={() => finishSketch()}>
-        <IconCheck size={14} /> Bitir
-      </button>
-    </div>
   );
 }
 
@@ -136,7 +52,7 @@ export function confirmCancel() {
   cancelAll();
 }
 
-function StatusPill() {
+export function StatusPill() {
   const status = useSketchUi((s) => s.status);
   const ready = useSketchUi((s) => s.solverReady);
   if (!ready || !status.known) {

@@ -10,6 +10,7 @@ import { IconClose, IconMate, IconPlus, IconUpload } from './icons';
 import { AddFilesButton } from './Toolbar';
 import { SketchToolbar } from './sketch/SketchToolbar';
 import { PickHint } from './modeling/PickHint';
+import { ContextUi } from './command/ContextUi';
 import { BASE_PLANES, createBody, startSketch } from '../modeling/actions';
 
 export function Overlays() {
@@ -20,6 +21,7 @@ export function Overlays() {
       <MateHint />
       <SketchToolbar />
       <PickHint />
+      <ContextUi />
       <Toast />
       <DropLayer />
     </div>

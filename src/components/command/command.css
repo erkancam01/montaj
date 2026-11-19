@@ -1,0 +1,729 @@
+/* ---------- sekmeli komut çubuğu ---------- */
+
+.toolbar.cmdbar {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+.cmd-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.cmd-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 10px;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cmd-file:hover,
+.cmd-file.active {
+  background: var(--accent-hover);
+}
+
+.cmd-quick {
+  display: flex;
+  gap: 2px;
+  padding-right: 6px;
+  margin-right: 2px;
+  border-right: 1px solid var(--border-strong);
+}
+
+.cmd-quick .btn-icon {
+  height: 24px;
+  width: 26px;
+  background: transparent;
+  border-color: transparent;
+}
+
+.cmd-tabs {
+  display: flex;
+  align-self: stretch;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.cmd-tab {
+  height: 26px;
+  padding: 0 14px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cmd-tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.cmd-tab.active {
+  position: relative;
+  top: 1px;
+  height: 27px;
+  background: var(--panel);
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.cmd-row {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  min-height: 58px;
+  padding: 3px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.cmd-inline {
+  display: contents;
+}
+
+.cmd-btn {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  flex: none;
+  min-width: 52px;
+  max-width: 78px;
+  padding: 5px 4px 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.cmd-btn:hover:not(:disabled) {
+  background: var(--panel-3);
+  border-color: var(--border-strong);
+}
+
+.cmd-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.cmd-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #cfe0ff;
+}
+
+.cmd-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  color: #c9d6ea;
+}
+
+.cmd-btn.active .cmd-btn-icon {
+  color: #fff;
+}
+
+.cmd-btn-label {
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cmd-caret {
+  margin-left: 2px;
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+.cmd-kbd {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  padding: 0 2px;
+  font-size: 8.5px;
+  font-family: inherit;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+}
+
+.cmd-btn.suggest:not(:disabled) {
+  border-color: var(--ok);
+  background: rgba(70, 167, 88, 0.16);
+  animation: cmd-pulse 1.4s ease-in-out 3;
+}
+
+@keyframes cmd-pulse {
+  50% {
+    box-shadow: 0 0 0 3px rgba(70, 167, 88, 0.35);
+  }
+}
+
+.cmd-sep {
+  flex: none;
+  width: 1px;
+  margin: 4px 5px;
+  background: var(--border-strong);
+}
+
+.cmd-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  padding: 0 4px;
+}
+
+.cmd-stack-row {
+  display: flex;
+  gap: 3px;
+}
+
+.cmd-stack-label {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.cmd-stack .tb-select {
+  height: 22px;
+  font-size: 12px;
+}
+
+.cmd-stats {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 8px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.cmd-stats b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------- açılır menü ---------- */
+
+.pmenu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 190px;
+  max-width: 300px;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.pmenu-heading {
+  padding: 5px 8px 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pmenu-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+.pmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 27px;
+  padding: 0 8px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pmenu-item:hover:not(:disabled),
+.pmenu-item:focus-visible {
+  background: var(--accent-soft);
+}
+
+.pmenu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pmenu-item.primary .pmenu-label {
+  color: #cfe0ff;
+  font-weight: 600;
+}
+
+.pmenu-item.danger {
+  color: #ff9a9d;
+}
+
+.pmenu-icon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.pmenu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pmenu-hint {
+  flex: none;
+  font-size: 10.5px;
+  font-family: inherit;
+  color: var(--text-faint);
+  background: none;
+  border: 0;
+}
+
+/* S menüsü: simge ızgarası */
+.pmenu.pmenu-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 64px);
+  gap: 2px;
+  min-width: 0;
+  max-width: none;
+  border-radius: 10px;
+}
+
+.pmenu-grid .pmenu-item {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  height: 56px;
+  padding: 4px 2px;
+  position: relative;
+}
+
+.pmenu-grid .pmenu-icon {
+  width: auto;
+  color: #c9d6ea;
+}
+
+.pmenu-grid .pmenu-label {
+  flex: none;
+  max-width: 100%;
+  font-size: 10.5px;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.1;
+}
+
+.pmenu-grid .pmenu-hint {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
+}
+
+.pmenu-grid .pmenu-sep,
+.pmenu-grid .pmenu-heading {
+  grid-column: 1 / -1;
+}
+
+/* ---------- sahne üstü: onay köşesi, bağlam kutusu, öneri ---------- */
+
+.confirm-corner {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 10px;
+  background: rgba(28, 32, 38, 0.94);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.confirm-corner-title {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.okc {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.okc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.okc.compact .okc-btn {
+  width: 34px;
+  height: 30px;
+}
+
+.okc-btn.ok {
+  background: rgba(70, 167, 88, 0.18);
+  border-color: rgba(70, 167, 88, 0.5);
+  color: #6fd383;
+}
+
+.okc-btn.ok:hover:not(:disabled) {
+  background: var(--ok);
+  color: #fff;
+}
+
+.okc-btn.ok:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.okc-btn.cancel {
+  background: var(--danger-soft);
+  border-color: rgba(229, 72, 77, 0.45);
+  color: #ff8a8d;
+}
+
+.okc-btn.cancel:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.ctx-box {
+  position: fixed;
+  z-index: 900;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(34, 39, 46, 0.97);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  animation: ctx-in 0.12s ease-out;
+}
+
+@keyframes ctx-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+}
+
+.ctx-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #c9d6ea;
+  cursor: pointer;
+}
+
+.ctx-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ctx-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.suggest-wrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 18px;
+  display: flex;
+  justify-content: center;
+  padding: 0 120px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.suggest {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 6px 6px 12px;
+  background: rgba(28, 32, 38, 0.96);
+  border: 1px solid rgba(70, 167, 88, 0.6);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  animation: ctx-in 0.18s ease-out;
+}
+
+.suggest-text {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.suggest-text b {
+  color: var(--text);
+}
+
+.suggest-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.suggest-close:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* ---------- sol komut paneli ---------- */
+
+.cmd-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.cmd-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  height: 40px;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.cmd-panel-icon {
+  display: inline-flex;
+  color: var(--accent-hover);
+}
+
+.cmd-panel-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.cmd-panel-msg {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--warn);
+  background: rgba(217, 164, 65, 0.08);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ✓ / ✕ üstte olduğu için panel içindeki alt düğmeler gizlenir */
+.cmd-panel .fi-actions,
+.cmd-panel .sk-insp-actions {
+  display: none;
+}
+
+.mate-steps {
+  margin: 4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.mate-steps li {
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-dim);
+}
+
+.mate-steps li.current {
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.mate-steps li.done {
+  border-left-color: var(--ok);
+}
+
+.mate-step-val {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+/* ---------- birleşik ağaç ---------- */
+
+.utree .mate-section {
+  border-top: 0;
+  margin-top: 2px;
+}
+
+.utree .mate-section.open {
+  max-height: none;
+}
+
+.utree .mate-section-header {
+  height: var(--row-h);
+  padding: 0 6px;
+  border-bottom: 0;
+  border-left: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+
+.utree .mate-section-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.utree .mate-section-title::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 9px;
+  margin-right: 6px;
+  vertical-align: -1px;
+  border: 1.3px solid var(--warn);
+  border-radius: 1px 2px 2px 2px;
+  opacity: 0.85;
+}
+
+.utree .mate-list {
+  overflow: visible;
+  padding: 0 0 2px 14px;
+}
+
+.tree-kind-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-dim);
+}
+
+.tree-kind-icon.body {
+  color: var(--accent-hover);
+}
+
+.tree-mark {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--warn);
+}
+
+.tree-mark.fixed {
+  color: var(--text-dim);
+}
+
+.tree-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: #cfe0ff;
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.tree-row.tree-body.editing {
+  border-left-color: var(--accent);
+}
+
+.tree-features {
+  padding-left: 14px;
+}
+
+.tree-features .ft.ft-inline {
+  max-height: none;
+  border-bottom: 0;
+  background: transparent;
+  box-shadow: inset 1px 0 0 var(--border-strong);
+}
+
+.tree-features .ft-list {
+  overflow: visible;
+  padding: 1px 0;
+}
+
+.tree-row .text-input.ft-rename {
+  height: 20px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
