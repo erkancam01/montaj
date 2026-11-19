@@ -13,6 +13,7 @@ import {
 import { useAssembly } from '@/state/useAssembly';
 import { ConstraintIcon } from '@/ui/icons/sketchIcons';
 import { SketchOverlay } from '@/ui/sketch/SketchOverlay';
+import { DxfImportDialog } from '@/ui/sketch/DxfImportDialog';
 import { cancelAll } from '@/ui/sketch/tools';
 import '@/ui/sketch/sketch.css';
 
@@ -39,6 +40,7 @@ export function SketchToolbar() {
   return (
     <>
       <SketchOverlay />
+      <DxfImportDialog />
       <div className="sk-toolbar-wrap">
         <Relations />
       </div>

@@ -34,9 +34,10 @@ import { importWithConfirm, isDocEmpty } from '@/ui/shell/importWithConfirm';
 import { IconGroup, IconMate, IconPlus, IconRedo, IconUndo, IconUngroup } from '@/ui/icons/icons';
 import { FIcon } from '@/ui/icons/featureIcons';
 import { confirmCancel, SKETCH_TOOLS, StatusPill } from '@/ui/sketch/SketchToolbar';
+import { openDxfImport } from '@/ui/sketch/DxfImportDialog';
 import { IconConstruction, ToolIcon } from '@/ui/icons/sketchIcons';
 import { chooseTool, constructionKey, resetDraw } from '@/ui/sketch/tools';
-import { FEATURE_TOOLS } from '@/core/features/registry';
+import { FEATURE_TOOL_GROUPS, FEATURE_TOOLS } from '@/core/features/registry';
 import '@/ui/commands/command.css';
 
 const MOVE_STEPS = [0.1, 0.5, 1, 5, 10, 50, 100];
@@ -497,7 +498,7 @@ function FeaturesTab() {
       <Sep />
       {FEATURE_TOOLS.map((t, i) => (
         <span key={t.tool} className="cmd-inline">
-          {(i === 3 || i === 6) && <Sep />}
+          {i > 0 && FEATURE_TOOL_GROUPS.includes(t.tool) && <Sep />}
           <CmdButton
             icon={<FIcon name={t.icon} size={22} />}
             label={t.label}
@@ -553,6 +554,13 @@ function SketchTab() {
           onClick={() => runCommand(`sk-${t.tool}`, t.label, () => chooseTool(t.tool))}
         />
       ))}
+      <CmdButton
+        icon={<CIcon name="importDxf" size={22} />}
+        label="DXF"
+        title={sketchOpen ? "DXF profil kesitini sketch'e sabit geometri olarak aktar (DWG için önce DXF olarak kaydedin)" : off}
+        disabled={!sketchOpen}
+        onClick={() => runCommand('sk-dxf', 'DXF içe aktar', openDxfImport)}
+      />
       <Sep />
       <CmdButton
         icon={<IconConstruction size={22} />}

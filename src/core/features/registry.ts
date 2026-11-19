@@ -12,7 +12,7 @@
 // (3) services/kernel/build.ts'e geometri üretimini, (4) ui/modeling/FeatureInspector.tsx'e formunu ekle.
 // Başka bir yere dokunmak gerekmez.
 import { BASE_PLANES } from '@/core/modeling/planes';
-import type { Body, Feature, FeatureType, ParamUnit } from '@/core/types';
+import type { Body, ExtrudeFeature, Feature, FeatureType, ParamUnit, RevolveFeature, SweepFeature } from '@/core/types';
 
 /** Özellik simgesi anahtarı (ui/icons/featureIcons PATHS anahtarlarıyla aynı) */
 export type FeatureIconKey = FeatureType | 'cut';
@@ -76,6 +76,23 @@ export const FEATURES: { [T in FeatureType]: FeatureDef<T> } = {
     defaults: ({ sketchId }) => ({ sketchId, profilePoints: [], axisLineId: '', angle: 360, reverse: false, operation: 'add', merge: true }),
     fields: () => [deg('angle', 'Açı')],
     uses: (f) => [f.sketchId],
+  },
+  sweep: {
+    label: 'Süpür',
+    icon: 'sweep',
+    defaults: ({ sketchId }) => ({
+      sketchId,
+      profilePoints: [],
+      pathSketchId: '',
+      placement: 'auto',
+      rotate: 0,
+      flip: false,
+      corner: 'right',
+      operation: 'add',
+      merge: true,
+    }),
+    fields: () => [],
+    uses: (f) => [f.sketchId, f.pathSketchId],
   },
   fillet: {
     label: 'Radyus',
@@ -142,11 +159,12 @@ export const FEATURES: { [T in FeatureType]: FeatureDef<T> } = {
   },
 };
 
-/** Komut çubuğu sırası (araya ayırıcı: 3. ve 6. öğeden önce) */
+/** Komut çubuğu sırası (araya ayırıcı: FEATURE_TOOL_GROUPS'taki öğelerden önce) */
 export const FEATURE_TOOLS: { tool: FeatureTool; label: string; icon: FeatureIconKey; needs: ToolNeeds; title: string }[] = [
   { tool: 'extrude', label: 'Extrude', icon: 'extrude', needs: 'sketch', title: 'Sketch profilini doğrusal uzatarak katı ekle' },
   { tool: 'cut', label: 'Kesme', icon: 'cut', needs: 'sketch+solid', title: 'Sketch profilini uzatıp gövdeden çıkar' },
   { tool: 'revolve', label: 'Revolve', icon: 'revolve', needs: 'sketch', title: 'Sketch profilini bir eksen etrafında döndür' },
+  { tool: 'sweep', label: 'Süpür', icon: 'sweep', needs: 'sketch', title: "Profil sketch'ini bir yol (çizgi/yay zinciri) boyunca süpür; kapalı yolda köşeler gönyeli" },
   { tool: 'fillet', label: FEATURES.fillet.label, icon: 'fillet', needs: 'solid', title: 'Seçilen kenarları yuvarlat' },
   { tool: 'chamfer', label: FEATURES.chamfer.label, icon: 'chamfer', needs: 'solid', title: 'Seçilen kenarlara pah kır' },
   { tool: 'hole', label: FEATURES.hole.label, icon: 'hole', needs: 'solid', title: 'Düz bir yüzeye delik aç' },
@@ -154,6 +172,19 @@ export const FEATURE_TOOLS: { tool: FeatureTool; label: string; icon: FeatureIco
   { tool: 'circularPattern', label: FEATURES.circularPattern.label, icon: 'circularPattern', needs: 'solid', title: 'Özellikleri bir eksen etrafında çoğalt' },
   { tool: 'mirror', label: FEATURES.mirror.label, icon: 'mirror', needs: 'solid', title: 'Özellikleri ya da gövdeyi bir düzleme göre aynala' },
 ];
+
+/** Komut çubuğunda önüne ayırıcı konan araçlar */
+export const FEATURE_TOOL_GROUPS: FeatureTool[] = ['fillet', 'linearPattern'];
+
+/** Sketch profilinden katı üreten özellikler (profil bölgesi seçimi, "katı var mı" kontrolü) */
+export type ProfileFeature = ExtrudeFeature | RevolveFeature | SweepFeature;
+export function isProfileFeature(f: { type: FeatureType }): f is ProfileFeature {
+  return f.type === 'extrude' || f.type === 'revolve' || f.type === 'sweep';
+}
+/** Gövdeye katı ekleyen özellik mi */
+export function addsSolid(f: Feature): boolean {
+  return isProfileFeature(f) && f.operation === 'add';
+}
 
 /** Tip → ad (eski kullanım; tek tek özellik için featureLabel tercih edin) */
 export const FEATURE_LABELS = Object.fromEntries(Object.entries(FEATURES).map(([k, d]) => [k, d.label])) as Record<FeatureType, string>;
@@ -164,6 +195,7 @@ const def = <T extends FeatureType>(f: FeatureOf<T>) => FEATURES[f.type as T] as
 export function featureLabel(f: { type: FeatureType; operation?: string }): string {
   if (f.type === 'extrude' && f.operation === 'cut') return 'Kesme';
   if (f.type === 'revolve' && f.operation === 'cut') return 'Revolve (kes)';
+  if (f.type === 'sweep' && f.operation === 'cut') return 'Süpür (kes)';
   return FEATURES[f.type].label;
 }
 

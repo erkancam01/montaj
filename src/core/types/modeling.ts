@@ -278,10 +278,38 @@ export interface MirrorFeature extends FeatureBase {
   plane: PlaneDef;
 }
 
+/**
+ * Süpür: profil sketch'inin kapalı bölgeleri, yol sketch'indeki eğri zinciri boyunca süpürülür.
+ * Yol: yardımcı olmayan çizgi/yay/dairelerden oluşan tek zincir (açık ya da kapalı). Kapalı yolda köşeler
+ * gönyeli (right) ya da yuvarlak (round) birleşir.
+ */
+export interface SweepFeature extends FeatureBase {
+  type: 'sweep';
+  /** Profil sketch'i */
+  sketchId: string;
+  profilePoints: Vec2[];
+  /** Yol sketch'i */
+  pathSketchId: string;
+  /**
+   * auto: profil sketch'i orijini yolun başlangıcına (kapalı yolda ilk kenarın ortasına), yola dik taşınır;
+   * sketch x ekseni yol düzleminin normaline, y ekseni yolun sağına gelir. sketch: profil yerinde kalır.
+   */
+  placement: 'auto' | 'sketch';
+  /** auto yerleşimde profilin yol etrafında dönüşü (derece) */
+  rotate: number;
+  /** auto yerleşimde profili aynala (x ekseni ters) */
+  flip: boolean;
+  /** Köşe birleşimi: gönyeli (keskin) ya da yuvarlak */
+  corner: 'right' | 'round';
+  operation: BoolOp;
+  merge?: boolean;
+}
+
 export type Feature =
   | SketchFeature
   | ExtrudeFeature
   | RevolveFeature
+  | SweepFeature
   | FilletFeature
   | ChamferFeature
   | HoleFeature

@@ -1,6 +1,6 @@
 // Sağ panel: açık özellik taslağının formu. Her değişiklik taslağa yazılır (canlı önizleme);
 // Uygula geçmişe işler, İptal taslağı atar.
-import { featureLabel } from '@/core/features/registry';
+import { featureLabel, isProfileFeature } from '@/core/features/registry';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { worldFaceGeom } from '@/core/geometry/faceGeometry';
@@ -27,6 +27,7 @@ import type {
   PickTarget,
   RevolveFeature,
   SketchFeature,
+  SweepFeature,
   Vec2,
   Vec3,
 } from '@/core/types';
@@ -124,6 +125,12 @@ function validate(d: Feature, body: Body | undefined, ui: { profileMode: 'all' |
       if (!(d.angle > 0)) return 'Açı sıfırdan büyük olmalı';
       return null;
     }
+    case 'sweep':
+      if (!sketch(d.sketchId)) return 'Profil sketch\'ini seçin';
+      if (!sketch(d.pathSketchId)) return 'Yol sketch\'ini seçin';
+      if (d.pathSketchId === d.sketchId) return 'Profil ve yol ayrı sketch\'lerde olmalı';
+      if (ui.profileMode === 'pick' && !d.profilePoints.length) return 'Sahnede en az bir profil bölgesi seçin';
+      return null;
     case 'fillet':
       if (!d.edges.length) return 'En az bir kenar seçin';
       if (!(d.radius > 0)) return 'Yarıçap sıfırdan büyük olmalı';
@@ -205,7 +212,7 @@ function FeatureForm({ bodyId, isNew }: { bodyId: string; isNew: boolean }) {
     const d = curDraft();
     const u = useModelingUi.getState();
     u.reset();
-    if (d && (d.type === 'extrude' || d.type === 'revolve')) u.set({ profileMode: d.profilePoints.length ? 'pick' : 'all' });
+    if (d && isProfileFeature(d)) u.set({ profileMode: d.profilePoints.length ? 'pick' : 'all' });
     if (d && d.type === 'hole') u.set({ holeFaceChosen: !isNew, holePlace: false });
     // Yeni özellikte ilk adım doğrudan başlar
     if (isNew && d) {
@@ -250,6 +257,7 @@ function FeatureForm({ bodyId, isNew }: { bodyId: string; isNew: boolean }) {
 
       {draft.type === 'extrude' && <ExtrudeForm d={draft} body={body} />}
       {draft.type === 'revolve' && <RevolveForm d={draft} body={body} />}
+      {draft.type === 'sweep' && <SweepForm d={draft} body={body} />}
       {(draft.type === 'fillet' || draft.type === 'chamfer') && <EdgeFeatureForm d={draft} bodyId={bodyId} />}
       {draft.type === 'hole' && <HoleForm d={draft} bodyId={bodyId} />}
       {draft.type === 'linearPattern' && <LinearPatternForm d={draft} body={body} bodyId={bodyId} />}
@@ -450,7 +458,7 @@ function OpSeg({ value, onChange }: { value: 'add' | 'cut'; onChange(v: 'add' | 
 }
 
 /** Extrude/Revolve profil seçimi */
-function ProfileField({ d, body }: { d: ExtrudeFeature | RevolveFeature; body: Body | undefined }) {
+function ProfileField({ d, body }: { d: ExtrudeFeature | RevolveFeature | SweepFeature; body: Body | undefined }) {
   const mode = useModelingUi((s) => s.profileMode);
   const sk = body?.features.find((f): f is SketchFeature => f.id === d.sketchId && f.type === 'sketch');
   const regions = sk ? sketchRegions(sk) : [];
@@ -546,7 +554,7 @@ function ExtrudeForm({ d, body }: { d: ExtrudeFeature; body: Body | undefined })
 }
 
 /** "Sonucu birleştir": kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur */
-function MergeCheck({ d }: { d: ExtrudeFeature | RevolveFeature }) {
+function MergeCheck({ d }: { d: ExtrudeFeature | RevolveFeature | SweepFeature }) {
   return (
     <Field label="">
       <Check
@@ -556,6 +564,116 @@ function MergeCheck({ d }: { d: ExtrudeFeature | RevolveFeature }) {
         onChange={(v) => up({ merge: v })}
       />
     </Field>
+  );
+}
+
+
+// ---------------------------------------------------------------- Süpür
+
+/** Yol için uygun sketch: kapalı bölgesi olmayan (açık zincir) önce, yoksa profilden farklı herhangi biri */
+function guessPathSketch(body: Body | undefined, profileId: string): string {
+  const sks = (body?.features ?? []).filter((f): f is SketchFeature => f.type === 'sketch' && f.id !== profileId);
+  const regionsOf = (s: SketchFeature) => {
+    try {
+      return sketchRegions(s).length;
+    } catch {
+      return 0;
+    }
+  };
+  return (sks.find((s) => regionsOf(s) === 0) ?? sks[sks.length - 1])?.id ?? '';
+}
+
+function SweepForm({ d, body }: { d: SweepFeature; body: Body | undefined }) {
+  const cut = d.operation === 'cut';
+  // Yol seçilmemişse tahmin et; profil sketch'inde bölge yoksa ve yol adayında varsa yer değiştir
+  useEffect(() => {
+    if (d.pathSketchId) return;
+    const prof = body?.features.find((f): f is SketchFeature => f.id === d.sketchId && f.type === 'sketch');
+    let hasRegions = false;
+    try {
+      hasRegions = !!prof && sketchRegions(prof).length > 0;
+    } catch {
+      hasRegions = false;
+    }
+    const other = (body?.features ?? []).filter((f): f is SketchFeature => f.type === 'sketch' && f.id !== d.sketchId);
+    if (!hasRegions) {
+      const withRegions = other.find((s) => {
+        try {
+          return sketchRegions(s).length > 0;
+        } catch {
+          return false;
+        }
+      });
+      if (withRegions) {
+        up({ sketchId: withRegions.id, pathSketchId: d.sketchId, profilePoints: [] });
+        return;
+      }
+    }
+    const p = guessPathSketch(body, d.sketchId);
+    if (p) up({ pathSketchId: p });
+  }, [d.pathSketchId, d.sketchId, body]);
+
+  return (
+    <section className="prop-section">
+      <Field label="Profil">
+        <SketchSelect body={body} value={d.sketchId} onChange={(id) => up({ sketchId: id, profilePoints: [] })} />
+      </Field>
+      <ProfileField d={d} body={body} />
+      <Field
+        label="Yol"
+        hint="Yol sketch'indeki çizgi/yay zinciri (yardımcı çizgiler hariç). Kapalı yol (ör. dikdörtgen) gönyeli bir çerçeve üretir."
+      >
+        <SketchSelect body={body} value={d.pathSketchId} onChange={(id) => up({ pathSketchId: id })} />
+      </Field>
+      <Field
+        label="Yerleşim"
+        hint={
+          d.placement === 'auto'
+            ? "Profil sketch'inin orijini yolun başına (kapalı yolda ilk kenarın ortasına) yola dik taşınır."
+            : "Profil sketch'te olduğu yerde kalır: yolun başında ve yola dik çizilmiş olmalı."
+        }
+      >
+        <Seg
+          label="Yerleşim"
+          value={d.placement}
+          onChange={(v) => up({ placement: v })}
+          options={[
+            { v: 'auto', label: 'Yolun başına', title: 'Profili yolun başına, yola dik taşı (önerilen)' },
+            { v: 'sketch', label: 'Yerinde', title: "Profil sketch'teki konumunda kalsın" },
+          ]}
+        />
+      </Field>
+      {d.placement === 'auto' && (
+        <>
+          <Field label="Döndür">
+            <Seg
+              label="Döndür"
+              value={String(((Math.round(d.rotate / 90) * 90) % 360 + 360) % 360)}
+              onChange={(v) => up({ rotate: Number(v) })}
+              options={['0', '90', '180', '270'].map((v) => ({ v, label: `${v}°`, title: `Profili yol etrafında ${v}° döndür` }))}
+            />
+          </Field>
+          <Field label="">
+            <Check label="Profili aynala" checked={d.flip} onChange={(v) => up({ flip: v })} />
+          </Field>
+        </>
+      )}
+      <Field label="Köşeler">
+        <Seg
+          label="Köşeler"
+          value={d.corner}
+          onChange={(v) => up({ corner: v })}
+          options={[
+            { v: 'right', label: 'Gönyeli', title: 'Köşeler keskin (45° gönye gibi) birleşir' },
+            { v: 'round', label: 'Yuvarlak', title: 'Köşeler yuvarlatılarak birleşir' },
+          ]}
+        />
+      </Field>
+      <Field label="İşlem">
+        <OpSeg value={d.operation} onChange={(v) => up({ operation: v })} />
+      </Field>
+      {!cut && <MergeCheck d={d} />}
+    </section>
   );
 }
 

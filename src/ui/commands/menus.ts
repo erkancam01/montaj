@@ -213,7 +213,7 @@ export function sMenuEntries(): MenuEntry[] {
     ];
   }
   if (s.modeling.activeBodyId || targetBodyId(s)) {
-    const feat = FEATURE_TOOLS.filter((t) => ['extrude', 'cut', 'revolve', 'fillet', 'chamfer', 'hole'].includes(t.tool)).map(
+    const feat = FEATURE_TOOLS.filter((t) => ['extrude', 'cut', 'revolve', 'sweep', 'fillet', 'chamfer', 'hole'].includes(t.tool)).map(
       (t): MenuItem => ({
         label: t.label,
         icon: createElement(FIcon, { name: t.icon, size: 18 }),

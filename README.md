@@ -26,6 +26,12 @@ ilk girildiğinde arka planda yüklenir.
 - STEP/IGES/BREP dosyalarını pencereye sürükleyin ya da **Dosya ekle**.
 - Parçaları gizmo ile taşıyın/döndürün (W/E), **Zemine oturt** (G). Fareyle: parçaya sol basıp sürükle =
   döndür (kendi merkezi etrafında), sağ basıp sürükle = taşı; mate'li parça yalnız serbest yönlerinde hareket eder.
+- **DXF içe aktar** (Çizim sekmesi, sketch açıkken): profil kesitini sabit geometri olarak sketch'e alır.
+  Katman, birim, döndürme, ayna ve yerleşim seçilir; açık uçlar birleştirilir, kopyalar silinir. DWG'yi önce
+  AutoCAD'de DXF olarak kaydedin.
+- **Süpür** (Özellikler sekmesi): profil sketch'ini bir yol sketch'i (çizgi/yay zinciri) boyunca süpürür.
+  "Yolun başına" yerleşimde profil otomatik yola dik konur; kapalı yolda (ör. FFB × FFH dikdörtgen) köşeleri
+  gönyeli bir kasa çıkar. Döndür 180° ile profil yolun içine alınır.
 - Extrude/Revolve'da **Sonucu birleştir** kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur
   (birbirine değmeyen bölgeler de ayrı parça olur).
 - **Mate (M)**: önce yerinde kalacak referans yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın.

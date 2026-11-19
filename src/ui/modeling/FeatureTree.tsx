@@ -261,6 +261,8 @@ function describe(f: Feature): string {
       return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${f.throughAll ? 'tümünden' : `${Number(f.distance.toFixed(2))} mm`}`;
     case 'revolve':
       return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${Number(f.angle.toFixed(1))}°`;
+    case 'sweep':
+      return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${f.corner === 'round' ? 'yuvarlak' : 'gönyeli'} köşe`;
     case 'fillet':
       return `R${Number(f.radius.toFixed(2))} · ${f.edges.length} kenar`;
     case 'chamfer':

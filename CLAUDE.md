@@ -7,7 +7,7 @@ yıllarca SolidWorks 2022 kullanmıştır: arayüz ve davranış kararlarında S
 ## Çalıştırma
 - `npm install` (postinstall `scripts/copy-occt.mjs` occt-import-js dosyalarını `public/`'e kopyalar)
 - `npm run dev` → http://localhost:5173 (`.claude/launch.json`: "step-montaj")
-- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:expr` · `npm run test:mates` · `npm run test:origins`
+- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:expr` · `npm run test:mates` · `npm run test:origins` · `npm run test:dxf`
 
 ## Yığın
 Vite 8, React 19, TypeScript, three r187, @react-three/fiber 9, drei 10, zustand 5, idb-keyval, jszip,
@@ -42,7 +42,9 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
 - Kullanıcının STEP dosyalarını (ör. `*.STEP` kökte) git'e ekleme.
 
 ## Bilinen eksikler / sıradaki fikirler
-- Sketch: trim, teğet yay, spline yok.
+- Sketch: trim, teğet yay, spline yok (DXF spline/elips kısa çizgilerle yaklaşık gelir).
+- DXF ile gelen profil sabit geometridir (ext): taşımak için silip yeniden içe aktar. DWG okunmuyor.
+- Süpür: yol tek düzlemsel sketch zinciri; kenar başına ayrı çıta / kesim listesi yok.
 - Sabite bağlı zincirde uçtaki parça sürüklenince aradaki serbest parça birlikte gelmiyor.
 - Gövdenin ek katıları (ayrı parçalar) montajda taşınmışsa, gövde düzenlenirken sketch'ler asıl parçanın
   çerçevesinde kalır; ek katı yeniden oluşursa (ör. önizlemede "Sonucu birleştir" açılıp kapanınca) konumu/mate'leri sıfırlanır.

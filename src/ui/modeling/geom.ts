@@ -185,13 +185,13 @@ export function edgeLabel(s: EdgeSig): string {
 
 // ---------------------------------------------------------------- Özellik yardımcıları
 
-/** Desen/aynada seçilebilen özellikler: taslaktan önce gelen extrude/revolve/hole */
+/** Desen/aynada seçilebilen özellikler: taslaktan önce gelen extrude/revolve/süpür/hole */
 export function patternSources(body: Body | undefined, draftId: string): Feature[] {
   if (!body) return [];
   const out: Feature[] = [];
   for (const f of body.features) {
     if (f.id === draftId) break;
-    if (f.type === 'extrude' || f.type === 'revolve' || f.type === 'hole') out.push(f);
+    if (f.type === 'extrude' || f.type === 'revolve' || f.type === 'sweep' || f.type === 'hole') out.push(f);
   }
   return out;
 }

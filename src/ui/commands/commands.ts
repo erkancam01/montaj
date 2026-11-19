@@ -1,5 +1,6 @@
 // Komut çubuğu, bağlam kutusu, sağ tık ve S menüsünün ortak eylemleri. Son komut kaydı (Enter tekrarlar),
 // sketch oturumunda Çizim sekmesine geçiş ve sketch bitince Extrude önerisi de buradadır.
+import { addsSolid, isProfileFeature } from '@/core/features/registry';
 import { worldFaceGeom } from '@/core/geometry/faceGeometry';
 import {
   BASE_PLANES,
@@ -81,7 +82,7 @@ export function startTool(bodyId: string, tool: FeatureTool, sketchId?: string) 
     return;
   }
   const d = newFeatureDraft(bodyId, tool);
-  if (sketchId && (d.type === 'extrude' || d.type === 'revolve')) startFeature(bodyId, { ...d, sketchId });
+  if (sketchId && isProfileFeature(d)) startFeature(bodyId, { ...d, sketchId });
   else startFeature(bodyId, d);
 }
 
@@ -95,7 +96,7 @@ export function bodyCaps(s: AssemblyState, bodyId: string | null): BodyCaps {
   const fs = (b?.features ?? []).filter((f) => !f.suppressed);
   return {
     hasSketch: fs.some((f) => f.type === 'sketch'),
-    hasSolid: fs.some((f) => (f.type === 'extrude' || f.type === 'revolve') && f.operation === 'add'),
+    hasSolid: fs.some((f) => addsSolid(f)),
   };
 }
 
@@ -261,7 +262,7 @@ export function startCommandWatchers() {
         if (!f) queueMicrotask(() => discardIfEmpty(id));
       }
       if (f && f.type === 'sketch' && body) {
-        const used = body.features.some((x) => (x.type === 'extrude' || x.type === 'revolve') && x.sketchId === f.id);
+        const used = body.features.some((x) => isProfileFeature(x) && (x.sketchId === f.id || (x.type === 'sweep' && x.pathSketchId === f.id)));
         let closed = false;
         try {
           closed = sketchRegions(f).length > 0;

@@ -4,6 +4,7 @@ import {
   addHolesInFace,
   assembleWire,
   basicFaceExtrusion,
+  genericSweep,
   makeCircle,
   makeCompound,
   makeFace,
@@ -19,7 +20,7 @@ import {
   type Shape3D,
   type Wire,
 } from 'replicad';
-import { arcMid, findRegions, selectRegions, type Loop, type Region, type Seg } from '@/core/sketch/profiles';
+import { arcMid, findRegions, reverseLoop, selectRegions, type Loop, type Region, type Seg } from '@/core/sketch/profiles';
 import type {
   Body,
   BoolOp,
@@ -35,6 +36,7 @@ import type {
   PlaneDef,
   RevolveFeature,
   SketchFeature,
+  SweepFeature,
   Vec2,
   Vec3,
 } from '@/core/types';
@@ -506,6 +508,181 @@ function filletSolid(base: Shape3D, edges: Edge[], type: 'fillet' | 'chamfer', v
   return { shape: r, used: used.length };
 }
 
+
+// ---------------------------------------------------------------- süpür
+
+/** Yol parçası (sketch-2B, gidiş yönünde): çizgi, yay (ccw = gidiş saat yönü tersi) ya da tam daire */
+type PathSeg =
+  | { kind: 'line'; a: Vec2; b: Vec2 }
+  | { kind: 'arc'; c: Vec2; r: number; a: Vec2; b: Vec2; ccw: boolean }
+  | { kind: 'circle'; c: Vec2; r: number };
+
+const d2 = (p: Vec2, q: Vec2) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+
+/** Yol sketch'inin yardımcı olmayan eğrilerini tek zincire dizer (uçlar konumla eşleşir) */
+export function pathChain(sk: SketchFeature): { segs: PathSeg[]; closed: boolean } {
+  const pts = new Map<string, Vec2>();
+  for (const e of sk.entities) if (e.kind === 'point') pts.set(e.id, [e.x, e.y]);
+  const P = (id: string) => {
+    const p = pts.get(id);
+    if (!p) throw new FeatureError('Yol noktası bulunamadı');
+    return p;
+  };
+  const raw: PathSeg[] = [];
+  for (const e of sk.entities) {
+    if (e.kind === 'point' || e.construction) continue;
+    if (e.kind === 'line') raw.push({ kind: 'line', a: P(e.p1), b: P(e.p2) });
+    else if (e.kind === 'arc') raw.push({ kind: 'arc', c: P(e.c), r: e.r, a: P(e.start), b: P(e.end), ccw: true });
+    else raw.push({ kind: 'circle', c: P(e.c), r: e.r });
+  }
+  if (!raw.length) throw new FeatureError('Yol sketch\'inde çizgi/yay yok');
+  const circles = raw.filter((s) => s.kind === 'circle');
+  if (circles.length) {
+    if (raw.length > 1) throw new FeatureError('Yol tek bir zincir olmalı (daire tek başına yol olabilir)');
+    return { segs: circles, closed: true };
+  }
+  const open = raw as Exclude<PathSeg, { kind: 'circle' }>[];
+  let ext = 1;
+  for (const s of open) ext = Math.max(ext, Math.abs(s.a[0]), Math.abs(s.a[1]), Math.abs(s.b[0]), Math.abs(s.b[1]));
+  const tol = Math.max(1e-6, ext * 1e-7);
+  const deg = (p: Vec2) => open.reduce((n, s) => n + (d2(s.a, p) <= tol ? 1 : 0) + (d2(s.b, p) <= tol ? 1 : 0), 0);
+  for (const s of open) if (deg(s.a) > 2 || deg(s.b) > 2) throw new FeatureError('Yol dallanıyor: tek bir zincir olmalı');
+  // Açık zincirde tek dereceli uçtan başla
+  const startSeg = open.find((s) => deg(s.a) === 1) ?? open.find((s) => deg(s.b) === 1);
+  const used = new Set<number>();
+  const segs: PathSeg[] = [];
+  const flip = (s: Exclude<PathSeg, { kind: 'circle' }>): Exclude<PathSeg, { kind: 'circle' }> =>
+    s.kind === 'line' ? { kind: 'line', a: s.b, b: s.a } : { ...s, a: s.b, b: s.a, ccw: !s.ccw };
+  let first = startSeg ?? open[0];
+  if (startSeg && deg(startSeg.a) !== 1) first = flip(startSeg);
+  used.add(open.indexOf(startSeg ?? open[0]));
+  segs.push(first);
+  let cur = first.b;
+  for (;;) {
+    const i = open.findIndex((s, k) => !used.has(k) && (d2(s.a, cur) <= tol || d2(s.b, cur) <= tol));
+    if (i < 0) break;
+    used.add(i);
+    const s = d2(open[i].a, cur) <= tol ? open[i] : flip(open[i]);
+    segs.push(s);
+    cur = (s as { b: Vec2 }).b;
+  }
+  if (used.size !== open.length) throw new FeatureError('Yol tek bir zincir olmalı (kopuk parçalar var)');
+  const closed = segs.length > 1 && d2((segs[0] as { a: Vec2 }).a, cur) <= tol;
+  return { segs, closed };
+}
+
+const arcAng = (c: Vec2, p: Vec2) => Math.atan2(p[1] - c[1], p[0] - c[0]);
+
+/** Yay gidiş yönünde orta açı */
+function arcMidAngle(s: { c: Vec2; a: Vec2; b: Vec2; ccw: boolean }): number {
+  const a0 = arcAng(s.c, s.a);
+  let sw = arcAng(s.c, s.b) - a0;
+  if (s.ccw) {
+    while (sw <= 1e-12) sw += Math.PI * 2;
+  } else {
+    while (sw >= -1e-12) sw -= Math.PI * 2;
+  }
+  return a0 + sw / 2;
+}
+
+/** Kapalı yolu ilk kenarın ortasından başlatır (profil bir köşeye denk gelmesin; tüm köşeler gönyelenir) */
+function startAtMid(segs: PathSeg[]): PathSeg[] {
+  const s = segs[0];
+  if (s.kind === 'circle') return segs;
+  let m: Vec2;
+  if (s.kind === 'line') m = [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2];
+  else {
+    const t = arcMidAngle(s);
+    m = [s.c[0] + s.r * Math.cos(t), s.c[1] + s.r * Math.sin(t)];
+  }
+  const head = { ...s, a: m } as PathSeg;
+  const tail = { ...s, b: m } as PathSeg;
+  return [head, ...segs.slice(1), tail];
+}
+
+/** Yolun başlangıç noktası ve teğeti (sketch-2B) */
+function pathStart(s: PathSeg): { p: Vec2; t: Vec2 } {
+  if (s.kind === 'circle') return { p: [s.c[0] + s.r, s.c[1]], t: [0, 1] };
+  if (s.kind === 'line') {
+    const l = d2(s.a, s.b) || 1;
+    return { p: s.a, t: [(s.b[0] - s.a[0]) / l, (s.b[1] - s.a[1]) / l] };
+  }
+  const r = d2(s.a, s.c) || 1;
+  const u: Vec2 = [(s.a[0] - s.c[0]) / r, (s.a[1] - s.c[1]) / r];
+  return { p: s.a, t: s.ccw ? [-u[1], u[0]] : [u[1], -u[0]] };
+}
+
+function pathEdge(f: Frame, s: PathSeg): Edge {
+  if (s.kind === 'line') return makeLine(to3(f, s.a), to3(f, s.b));
+  if (s.kind === 'circle') return makeCircle(s.r, to3(f, s.c), f.n);
+  const t = arcMidAngle(s);
+  return makeThreePointArc(to3(f, s.a), to3(f, [s.c[0] + s.r * Math.cos(t), s.c[1] + s.r * Math.sin(t)]), to3(f, s.b));
+}
+
+function doSweep(st: State, ft: SweepFeature) {
+  const prof = sketchOf(st, ft.sketchId);
+  if (!ft.pathSketchId) throw new FeatureError('Yol sketch\'i seçilmedi');
+  if (ft.pathSketchId === ft.sketchId) throw new FeatureError('Profil ve yol ayrı sketch\'lerde olmalı');
+  const pathSk = sketchOf(st, ft.pathSketchId);
+  const regions = selectRegions(findRegions(prof.entities), ft.profilePoints);
+  if (!regions.length) throw new FeatureError('Profil sketch\'inde kapalı bölge bulunamadı');
+  const pf = frameOf(pathSk.plane);
+  let { segs, closed } = pathChain(pathSk);
+  if (closed && ft.placement === 'auto') segs = startAtMid(segs);
+  let spine: Wire;
+  try {
+    spine = assembleWire(segs.map((s) => pathEdge(pf, s)));
+  } catch (e) {
+    throw new FeatureError(errText(e, 'Yol oluşturulamadı'));
+  }
+  // Profil çerçevesi: auto → yolun başında, yola dik
+  let frame = frameOf(prof.plane);
+  if (ft.placement === 'auto') {
+    const { p, t } = pathStart(segs[0]);
+    const n = unit(add(mul(pf.x, t[0]), mul(pf.y, t[1])));
+    const o = to3(pf, p);
+    // x = yol düzleminin normali, y = n × x (yolun sağı); rotate ile n etrafında döner
+    const ang = ((ft.rotate || 0) * Math.PI) / 180;
+    const x0 = pf.n;
+    const y0 = cross(n, x0);
+    let x = add(mul(x0, Math.cos(ang)), mul(y0, Math.sin(ang)));
+    let nn = n;
+    // Ayna: x ve n birlikte ters (sağ el kuralı korunur, y aynı kalır)
+    if (ft.flip) {
+      x = mul(x, -1);
+      nn = mul(n, -1);
+    }
+    frame = { o, x, y: cross(nn, x), n: nn };
+  }
+  const mode = ft.corner === 'round' ? 'round' : 'right';
+  const sweepWire = (w: Wire): Shape3D => {
+    let r: Shape3D;
+    try {
+      r = genericSweep(w, spine, { transitionMode: mode, forceProfileSpineOthogonality: ft.placement === 'auto' }) as Shape3D;
+    } catch (e) {
+      throw new FeatureError(errText(e, 'Süpürme başarısız (profil yola dik ve yolun başında olmalı)'));
+    }
+    if (!solidCount(r)) throw new FeatureError('Süpürme katı üretmedi (profil yola dik ve yolun başında olmalı)');
+    return r;
+  };
+  // Her döngü saat yönü tersine (ccw) süpürülür: delik döngüleri (cw) ters katı vermesin
+  const ccw = (l: Loop) => (l.area < 0 ? reverseLoop(l) : l);
+  const solids: Shape3D[] = [];
+  for (const rg of regions) {
+    let s = sweepWire(loopWire(frame, ccw(rg.outer)));
+    if (rg.holes.length) {
+      const holes = rg.holes.map((h) => sweepWire(loopWire(frame, ccw(h))));
+      s = s.cut(compoundOf(holes));
+      if (!solidCount(s)) throw new FeatureError('Profil boşlukları süpürülemedi');
+    }
+    solids.push(s);
+  }
+  const tool = solids.length === 1 ? solids[0] : fuseAll(solids);
+  if (!solidCount(tool)) throw new FeatureError('Süpürme katı üretmedi');
+  applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
+  st.tools.set(ft.id, [{ op: ft.operation, shape: tool }]);
+}
+
 function doHole(st: State, ft: HoleFeature) {
   const all = whole(st);
   if (!all) throw new FeatureError('Kesilecek katı yok');
@@ -624,6 +801,7 @@ const FAIL_TEXT: Record<Feature['type'], string> = {
   sketch: 'Sketch işlenemedi',
   extrude: 'Ekstrüzyon başarısız',
   revolve: 'Döndürme başarısız',
+  sweep: 'Süpürme başarısız',
   fillet: 'Radyus başarısız',
   chamfer: 'Pah başarısız',
   hole: 'Delik açılamadı',
@@ -652,6 +830,9 @@ export function buildShape(body: Body): ShapeBuildResult {
           break;
         case 'revolve':
           doRevolve(st, ft);
+          break;
+        case 'sweep':
+          doSweep(st, ft);
           break;
         case 'fillet':
         case 'chamfer': {

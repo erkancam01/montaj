@@ -40,6 +40,14 @@ const PATHS: Record<FeatureType | 'cut' | 'body' | 'pencil' | 'up' | 'down' | 't
       <path d="M6 8.2l2-1.1 2 1.1v2.3l-2 1.1-2-1.1z" strokeDasharray="1.4 1" />
     </>
   ),
+  sweep: (
+    <>
+      <path d="M2.5 13.5c0-5.5 3.5-9 9-9" strokeDasharray="1.6 1.4" />
+      <path d="M1.2 11.8h3.2v3H1.2z" />
+      <path d="M10.4 2.6l2.4 1.9-2.4 2" />
+      <path d="M11 3.2h3.2v2.6H11z" />
+    </>
+  ),
   revolve: (
     <>
       <path d="M8 1.5v13" strokeDasharray="1.6 1.4" />

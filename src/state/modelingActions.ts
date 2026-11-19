@@ -20,7 +20,7 @@ import { ownPartIds, wouldCycle } from '@/core/modeling/refLocks';
 import { Quaternion, Vector3 } from 'three';
 import { BASE_PLANES } from '@/core/modeling/planes';
 import { bodyPrimaryPart, solidPartName } from '@/core/modeling/bodyParts';
-import { dependentsOf, FEATURE_LABELS, featureDefaults } from '@/core/features/registry';
+import { dependentsOf, FEATURE_LABELS, featureDefaults, addsSolid } from '@/core/features/registry';
 
 const st = () => useAssembly.getState();
 
@@ -407,7 +407,7 @@ export function lastSketchId(bodyId: string): string | null {
 /** Gövdede katı var mı (ilk ekleme işlemi add olmalı) */
 export function bodyHasSolid(bodyId: string): boolean {
   return (getBody(bodyId)?.features ?? []).some(
-    (f) => !f.suppressed && (f.type === 'extrude' || f.type === 'revolve') && f.operation === 'add',
+    (f) => !f.suppressed && addsSolid(f),
   );
 }
 

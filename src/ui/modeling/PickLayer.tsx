@@ -5,6 +5,7 @@
 // - revolve ekseni, desen yönü/ekseni ve ayna düzlemi için basit görseller
 // Tıklama/hover işlemleri canvas üzerinde elle raycast edilir (gövde mesh'leri olayları yutmasın diye);
 // tüketilen tıklama R3F'ye ulaşmaz.
+import { isProfileFeature } from '@/core/features/registry';
 import { bodyPrimaryPart } from '@/core/modeling/bodyParts';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
@@ -287,7 +288,7 @@ function resolveHit(ctx: Ctx): Hover | null {
     const q = planeTo2(d.plane, p);
     return { kind: 'point', p: [snap(q[0]), snap(q[1])] };
   }
-  if (d.type === 'extrude' || d.type === 'revolve') {
+  if (isProfileFeature(d)) {
     const body = s.doc.bodies.find((b) => b.id === fs.bodyId);
     const sk = sketchOf(body, d.sketchId);
     if (!sk) return null;
@@ -320,7 +321,7 @@ function activate(h: Hover): boolean {
     updateFeatureDraft({ points: [...d.points, h.p] });
     return true;
   }
-  if (h.kind === 'region' && (d.type === 'extrude' || d.type === 'revolve')) {
+  if (h.kind === 'region' && isProfileFeature(d)) {
     const body = s.doc.bodies.find((b) => b.id === fs.bodyId);
     const sk = sketchOf(body, d.sketchId);
     if (!sk) return false;
@@ -364,7 +365,7 @@ function Interaction({ setHover }: { setHover(h: Hover | null): void }) {
       if (s.modeling.sketch) return false;
       if (s.modeling.pick) return s.modeling.pick.kinds.includes('edge');
       const d = s.modeling.feature?.draft;
-      return !!d && (d.type === 'extrude' || d.type === 'revolve' || (d.type === 'hole' && useModelingUi.getState().holePlace));
+      return !!d && (isProfileFeature(d) || (d.type === 'hole' && useModelingUi.getState().holePlace));
     };
     const setCursor = (on: boolean) => {
       if (on) {
@@ -572,7 +573,7 @@ function DraftVisuals({ bodyId, draft, hover, picking }: { bodyId: string; draft
   if (!partId) return null;
 
   let content: ReactNode = null;
-  if (draft.type === 'extrude' || draft.type === 'revolve') {
+  if (isProfileFeature(draft)) {
     const sk = sketchOf(body, draft.sketchId);
     if (sk) {
       content = (

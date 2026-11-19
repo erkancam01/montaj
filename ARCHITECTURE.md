@@ -26,6 +26,7 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | `src/core/assembly/` | Mate çözücü, mate tip kuralları, rijit gruplar, serbestlik derecesi |
 | `src/core/geometry/` | Yüz tanıma (düzlem/silindir), geometri önbelleği |
 | `src/core/modeling/` | Parametreler (`params.ts`), yüz kökeni / eşleme, dış referanslar, temel düzlemler, gövdenin ayrı katıları → montaj parçaları (`bodyParts.ts`) |
+| `src/core/import/` | Dış dosya okuyucuları (saf): `dxf.ts` (DXF → 2B eğri, yerleşim, temizlik → sketch varlıkları) |
 | `src/core/sketch/` | Sketch kısıt çözücü (planegcs), kapalı bölge bulma, 2B geometri |
 | `src/state/` | Store (`useAssembly.ts`), montaj eylemleri, modelleme eylemleri, sketch oturumu, parça durumu |
 | `src/services/kernel/` | Modelleme çekirdeği (replicad/OpenCascade worker): katı üretimi, mesh, STEP yazma |
@@ -64,6 +65,8 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | Klavye kısayolları | `src/app/useShortcuts.ts`, `src/ui/hooks/useViewShortcuts.ts`, `src/ui/commands/useCommandKeys.ts` |
 | Telefon düzeni | `src/ui/mobile/mobile.css`, `MobileDock.tsx` |
 | Proje kaydı / açma | `src/services/io/session.ts`, `persistence.ts` |
+| DXF içe aktarma (okuma / temizlik) | `src/core/import/dxf.ts` · pencere: `src/ui/sketch/DxfImportDialog.tsx` |
+| Süpür geometrisi (yol zinciri, profil yerleşimi, köşeler) | `src/services/kernel/build.ts` (`doSweep`, `pathChain`) |
 | STEP okuma / yazma | `src/services/io/stepLoader.ts`, `src/services/kernel/exportStep.ts` |
 
 ### Yeni özellik eklemek (ör. "Kabuk")
@@ -79,4 +82,5 @@ Araç çubuğu, menüler, ağaç, parametre tablosu ve silme/sıralama kurallar�
 ## Testler
 
 `npm run test:expr` (ifadeler) · `npm run test:mates` (mate çözücü) · `npm run test:origins` (yüz kökeni) ·
+`npm run test:dxf` (DXF okuma; örnek dosya `scripts/fixtures/ornek-profil.dxf`) ·
 `npx tsc --noEmit -p .` · `npm run build`

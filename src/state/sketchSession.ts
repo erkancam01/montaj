@@ -578,6 +578,15 @@ export function deleteSelection() {
   setUi({ sel: [], hover: null });
 }
 
+/**
+ * Hazır sabit geometriyi (ör. DXF profili; varlıklar ext taşır) sketch'e ekler. Çözülmez: sabit geometri
+ * kısıt taşımaz. Tek geri alma adımıdır.
+ */
+export function addImportedEntities(entities: SkEntity[]): boolean {
+  if (!entities.length) return false;
+  return applySketch((d) => addItems(d, entities), { noSolve: true });
+}
+
 /** Silme: projeksiyon geometrisinden biri seçiliyse o projeksiyonun tamamı (ve kaydı) silinir */
 export function removeWithProjections(d: SketchFeature, ids: string[]): SketchFeature {
   const projIds = new Set<string>();
