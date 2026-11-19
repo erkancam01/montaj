@@ -1,0 +1,779 @@
+/* ---------- Dar ekran (telefon) düzeni ----------
+   main.tsx'te tüm stillerden SONRA yüklenir. ≥ 900 px'te yalnız ilk bölümdeki "varsayılan gizli" kurallar
+   geçerlidir; masaüstü görünümü değişmez.
+   < 900 px: sahne tam ekran; ağaç (sol) ve özellikler (sağ) üstten açılan çekmece; açık komut (sketch /
+   özellik / mate) dikeyde alttan yarım ekran sayfa, yatayda solda dar sütun. Sahnenin sol alt köşesi
+   (~56 px) dokunmatik kontrol düğmeleri (viewport/TouchControls) için boş bırakılır. */
+
+/* masaüstünde gizli parçalar */
+.mdock-btn,
+.mdrawer-backdrop,
+.cmd-sheet-toggle,
+.sk-touch-ok,
+.lbl-short {
+  display: none;
+}
+
+@media (max-width: 899.98px) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  :root {
+    --row-h: 34px;
+  }
+
+  /* ---------- ızgara ---------- */
+
+  .app {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    background: var(--panel);
+  }
+
+  .app > .toolbar {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .app > .viewport-box {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  /* ---------- çekmeceler ---------- */
+
+  .app > .tree-panel,
+  .app > .inspector-panel {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 160;
+    width: min(86vw, 340px);
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 0 32px rgba(0, 0, 0, 0.55);
+    visibility: hidden;
+  }
+
+  /* yalnız açılış kayar; kapanış (ve komut sayfasından dönüş) anında */
+  .app[data-drawer] > .tree-panel,
+  .app[data-drawer] > .inspector-panel {
+    transition: transform 0.18s ease;
+  }
+
+  .app > .tree-panel {
+    left: 0;
+    padding-left: env(safe-area-inset-left);
+    transform: translateX(-102%);
+  }
+
+  .app > .inspector-panel {
+    right: 0;
+    padding-right: env(safe-area-inset-right);
+    transform: translateX(102%);
+  }
+
+  .app[data-drawer='tree']:not([data-cmd]) > .tree-panel,
+  .app[data-drawer='props'] > .inspector-panel {
+    transform: none;
+    visibility: visible;
+  }
+
+  .mdrawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    background: rgba(6, 8, 12, 0.45);
+    touch-action: none;
+  }
+
+  .panel-header {
+    height: 40px;
+  }
+
+  /* ---------- komut sayfası (bottom sheet) ---------- */
+
+  .app[data-cmd] > .tree-panel {
+    position: relative;
+    top: auto;
+    bottom: auto;
+    left: auto;
+    z-index: 20;
+    grid-row: 3;
+    grid-column: 1 / -1;
+    width: auto;
+    height: 46vh;
+    height: 46dvh;
+    padding: 0;
+    transform: none;
+    visibility: visible;
+    transition: none;
+    border-right: 0;
+    border-top: 1px solid var(--border-strong);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .app[data-cmd][data-sheet='min'] > .tree-panel {
+    height: auto;
+  }
+
+  .app[data-sheet='min'] .cmd-panel-body,
+  .app[data-sheet='min'] .cmd-panel-msg {
+    display: none;
+  }
+
+  .cmd-panel-head {
+    height: 48px;
+    gap: 6px;
+    padding: 0 6px 0 10px;
+  }
+
+  .cmd-panel-head .okc-btn {
+    width: 44px;
+    height: 38px;
+  }
+
+  .cmd-sheet-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+
+  .cmd-sheet-toggle.min svg {
+    transform: rotate(180deg);
+  }
+
+  /* sayfanın üstteki ✓ / ✕ düğmeleri her zaman görünür; sahnedeki onay köşesi gereksiz */
+  .confirm-corner {
+    display: none;
+  }
+
+  /* ---------- çekmece düğmeleri ---------- */
+
+  .mdock-btn {
+    position: absolute;
+    top: 50%;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 44px;
+    height: 64px;
+    padding: 0;
+    transform: translateY(-50%);
+    background: rgba(28, 32, 38, 0.9);
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  .mdock-btn.left {
+    left: 0;
+    border-left: 0;
+    border-radius: 0 10px 10px 0;
+  }
+
+  .mdock-btn.right {
+    right: 0;
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
+  }
+
+  .mdock-btn.on {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .mdock-dot {
+    position: absolute;
+    top: 7px;
+    right: 7px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-hover);
+  }
+
+  /* ---------- üst komut çubuğu ---------- */
+
+  .cmd-top {
+    height: 44px;
+    gap: 4px;
+    padding: 0 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .cmd-top::-webkit-scrollbar,
+  .cmd-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .cmd-top .tb-brand,
+  .cmd-top .tb-spacer {
+    display: none;
+  }
+
+  .cmd-file {
+    flex: none;
+    height: 36px;
+    padding: 0 10px;
+  }
+
+  .cmd-quick {
+    flex: none;
+    padding-right: 4px;
+  }
+
+  .cmd-quick .btn-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .cmd-tabs {
+    flex: none;
+  }
+
+  .cmd-tab {
+    height: 38px;
+    padding: 0 12px;
+  }
+
+  .cmd-tab.active {
+    height: 39px;
+  }
+
+  .lbl-long {
+    display: none;
+  }
+
+  .lbl-short {
+    display: inline;
+  }
+
+  .cmd-row {
+    min-height: 56px;
+    padding: 2px 4px;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .cmd-btn {
+    min-width: 48px;
+    max-width: 68px;
+    min-height: 50px;
+    padding: 4px 3px 2px;
+  }
+
+  .cmd-btn-label {
+    max-width: 62px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cmd-kbd {
+    display: none;
+  }
+
+  /* iki satırlı yığınlar tek satıra açılır (çubuk zaten yatay kayar) */
+  .cmd-stack {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .cmd-stack .tb-select,
+  .cmd-stack .btn,
+  .cmd-stack .btn-small {
+    height: 36px;
+  }
+
+  .cmd-stack .seg button {
+    height: 34px;
+  }
+
+  /* ---------- düğme / alan boyları (dokunma) ---------- */
+
+  .btn {
+    height: 36px;
+  }
+
+  .btn-small {
+    height: 32px;
+  }
+
+  .btn-icon {
+    width: 36px;
+  }
+
+  .seg button {
+    height: 34px;
+  }
+
+  .panel .num-field,
+  .panel .text-input,
+  .panel .select-input {
+    height: 34px;
+  }
+
+  .panel .num-field input {
+    font-size: 14px;
+  }
+
+  .tree-eye,
+  .job-close {
+    width: 32px;
+    height: 32px;
+  }
+
+  /* ---------- menüler ---------- */
+
+  .pmenu,
+  .view-menu {
+    max-width: calc(100vw - 8px);
+    max-height: calc(100vh - 8px);
+    max-height: calc(100dvh - 8px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .pmenu-item,
+  .view-menu-item {
+    height: 40px;
+  }
+
+  .pmenu-grid .pmenu-item {
+    height: 60px;
+  }
+
+  .pmenu-hint,
+  .view-menu-item kbd,
+  .mate-hint-esc {
+    display: none;
+  }
+
+  .ctx-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  /* ---------- sahne üstü katmanlar ---------- */
+
+  .toast-wrap {
+    top: 8px;
+    padding: 0 8px;
+  }
+
+  .toast {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .mate-hint-wrap {
+    top: 8px;
+    padding: 0 8px;
+  }
+
+  .mate-hint-band {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+
+  .mate-hint-face {
+    max-width: 160px;
+  }
+
+  /* sol alt köşe dokunmatik kontrol düğmelerine ayrılmıştır */
+  .jobs {
+    left: 8px;
+    bottom: 64px;
+    width: min(300px, calc(100% - 64px));
+  }
+
+  .suggest-wrap {
+    bottom: 64px;
+    padding: 0 8px;
+  }
+
+  .suggest .btn-small {
+    height: 34px;
+  }
+
+  .suggest-close {
+    width: 34px;
+    height: 34px;
+  }
+
+  .empty-state {
+    align-items: safe center;
+    overflow: auto;
+    padding: 12px 52px;
+    pointer-events: auto;
+  }
+
+  .empty-card {
+    max-width: 100%;
+    padding: 16px 14px;
+  }
+
+  .empty-formats {
+    font-size: 11px;
+  }
+
+  /* ---------- sketch ---------- */
+
+  .sk-toolbar-wrap {
+    top: 8px;
+    padding: 0 8px;
+  }
+
+  .sk-relations {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sk-rel {
+    flex: none;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .overlays:has(.sk-relations) .toast-wrap {
+    top: 64px;
+  }
+
+  .overlays:has(.sk-toolbar-wrap) .toast-wrap {
+    top: 8px;
+  }
+
+  /* ---------- Parametreler penceresi: tam ekran, satırlar kart ---------- */
+
+  .pd-backdrop {
+    padding: 0;
+  }
+
+  .pd {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .pd-head {
+    padding: 6px 6px 6px 14px;
+  }
+
+  .pd-x {
+    width: 44px;
+    height: 40px;
+  }
+
+  .pd-body {
+    overflow-y: auto;
+    padding: 10px 12px;
+  }
+
+  .pd-tools .btn {
+    flex: 1 1 auto;
+  }
+
+  .pd-filter {
+    min-width: 0;
+    height: 36px;
+  }
+
+  .pd-table-wrap {
+    flex: none;
+    overflow: visible;
+    border: 0;
+  }
+
+  .pd-table,
+  .pd-table tbody {
+    display: block;
+  }
+
+  .pd-table thead {
+    display: none;
+  }
+
+  .pd-table tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px 44px;
+    grid-template-areas:
+      'name unit del'
+      'expr expr expr'
+      'val val use'
+      'comment icons icons';
+    gap: 6px;
+    margin-bottom: 8px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+  }
+
+  .pd-table tr.pd-row-err {
+    background: rgba(229, 72, 77, 0.07);
+    border-color: rgba(229, 72, 77, 0.35);
+  }
+
+  .pd-table td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    background: none !important;
+  }
+
+  .pd-table td:nth-child(1) {
+    grid-area: icons;
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    width: auto;
+  }
+  .pd-table td:nth-child(2) {
+    grid-area: name;
+  }
+  .pd-table td:nth-child(3) {
+    grid-area: unit;
+  }
+  .pd-table td:nth-child(4) {
+    grid-area: expr;
+  }
+  .pd-table td:nth-child(5) {
+    grid-area: val;
+    align-self: center;
+    white-space: normal;
+  }
+  .pd-table td:nth-child(6) {
+    grid-area: comment;
+  }
+  .pd-table td:nth-child(7) {
+    grid-area: use;
+    align-self: center;
+    width: auto;
+  }
+  .pd-table td:nth-child(8) {
+    grid-area: del;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .pd-table td:nth-child(4)::before,
+  .pd-table td:nth-child(5)::before {
+    display: block;
+    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-family: system-ui, sans-serif;
+    color: var(--text-faint);
+  }
+  .pd-table td:nth-child(4)::before {
+    content: 'İfade';
+  }
+  .pd-table td:nth-child(5)::before {
+    content: 'Değer';
+  }
+  .pd-table td:nth-child(7):not(:empty)::before {
+    content: 'Kullanım ';
+    font-size: 10.5px;
+    color: var(--text-faint);
+  }
+
+  .pd-table td.pd-empty {
+    grid-area: auto;
+    grid-column: 1 / -1;
+  }
+
+  .pd-in {
+    height: 36px;
+    min-width: 0;
+    font-size: 14px;
+  }
+
+  .pd-name,
+  .pd-expr,
+  .pd-comment {
+    min-width: 0;
+  }
+
+  .pd-unit {
+    width: 100%;
+  }
+
+  .pd-ic {
+    min-width: 40px;
+    height: 36px;
+    font-size: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+  }
+
+  .pd-foot {
+    padding: 8px 12px;
+  }
+
+  .pd-foot .btn {
+    flex: 1 1 0;
+  }
+}
+
+/* ---------- yatay telefon: komut paneli solda dar sütun, etiketsiz simgeler ---------- */
+@media (max-width: 899.98px) and (orientation: landscape) {
+  .app {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .app[data-cmd]:not([data-sheet='min']) > .viewport-box {
+    grid-column: 2;
+  }
+
+  .app[data-cmd] > .tree-panel {
+    grid-row: 2;
+    grid-column: 1;
+    width: min(320px, 44vw);
+    height: auto;
+    border-top: 0;
+    border-right: 1px solid var(--border-strong);
+    box-shadow: none;
+  }
+
+  /* daraltılınca yalnız başlık satırı sahnenin sol üstünde yüzer */
+  .app[data-cmd][data-sheet='min'] > .tree-panel {
+    align-self: start;
+    z-index: 30;
+    border: 1px solid var(--border-strong);
+    border-left: 0;
+    border-top: 0;
+    border-radius: 0 0 8px 0;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .cmd-sheet-toggle svg {
+    transform: rotate(90deg);
+  }
+
+  .cmd-sheet-toggle.min svg {
+    transform: rotate(-90deg);
+  }
+
+  .cmd-top {
+    height: 42px;
+  }
+
+  .cmd-row {
+    min-height: 46px;
+  }
+
+  .cmd-btn {
+    justify-content: center;
+    min-width: 44px;
+    min-height: 42px;
+    padding: 3px;
+  }
+
+  .cmd-btn-label {
+    display: none;
+  }
+
+  .empty-icon,
+  .empty-formats,
+  .empty-sub {
+    display: none;
+  }
+
+  .empty-card {
+    gap: 6px;
+    padding: 12px 14px;
+  }
+
+  .empty-divider {
+    margin: 4px 0 0;
+  }
+}
+
+/* ---------- dokunmatik: ölçü etiketleri ve giriş kutuları ---------- */
+@media (pointer: coarse) {
+  .sk-dim {
+    padding: 4px 8px;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .sk-badge {
+    width: 24px;
+    height: 24px;
+  }
+
+  .sk-dim-edit input {
+    width: 88px;
+    height: 34px;
+    font-size: 16px;
+  }
+
+  .sk-typed-field input {
+    width: 80px;
+    height: 36px;
+    font-size: 16px;
+  }
+
+  .sk-typed-help {
+    display: none;
+  }
+
+  .sk-touch-ok {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    margin-left: 2px;
+    padding: 0;
+    background: rgba(70, 167, 88, 0.2);
+    border: 1px solid rgba(70, 167, 88, 0.6);
+    border-radius: 6px;
+    color: #6fd383;
+    font-size: 17px;
+    cursor: pointer;
+  }
+}

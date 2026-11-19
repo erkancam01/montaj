@@ -232,11 +232,12 @@ function usePlanePick() {
 
 // ---------------------------------------------------------------- çubuk
 
-const TABS: { id: CommandTab; label: string }[] = [
-  { id: 'features', label: 'Özellikler' },
-  { id: 'sketch', label: 'Çizim' },
-  { id: 'assembly', label: 'Montaj' },
-  { id: 'evaluate', label: 'Değerlendir' },
+/** short: dar ekranda (mobile.css) gösterilen kısa etiket */
+const TABS: { id: CommandTab; label: string; short: string }[] = [
+  { id: 'features', label: 'Özellikler', short: 'Özellik' },
+  { id: 'sketch', label: 'Çizim', short: 'Çizim' },
+  { id: 'assembly', label: 'Montaj', short: 'Montaj' },
+  { id: 'evaluate', label: 'Değerlendir', short: 'Analiz' },
 ];
 
 export function Toolbar() {
@@ -258,7 +259,8 @@ export function Toolbar() {
               className={`cmd-tab ${tab === t.id ? 'active' : ''}`}
               onClick={() => setTab(t.id)}
             >
-              {t.label}
+              <span className="lbl-long">{t.label}</span>
+              <span className="lbl-short">{t.short}</span>
             </button>
           ))}
         </div>

@@ -220,6 +220,8 @@ function DimEditor({ c }: { c: SkConstraint }) {
         ref={input}
         value={text}
         inputMode="decimal"
+        enterKeyHint="done"
+        autoComplete="off"
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           e.stopPropagation();
@@ -233,6 +235,10 @@ function DimEditor({ c }: { c: SkConstraint }) {
         aria-label="Ölçü değeri"
       />
       <span className="sk-dim-unit">{unit}</span>
+      {/* Dokunmatik: Enter tuşu olmayan sayı klavyeleri için onay (masaüstünde gizli) */}
+      <button type="button" className="sk-touch-ok" aria-label="Ölçüyü uygula" onPointerDown={(e) => e.preventDefault()} onClick={commit}>
+        ✓
+      </button>
     </span>
   );
 }
@@ -273,15 +279,33 @@ const BadgeEl = memo(function BadgeEl({
 
 // ---------------------------------------------------------------- İmleç ipucu, giriş kutusu, kutu seçimi
 
+/** İmleç yanındaki kutu dar sahnede sağ/alt kenardan taşmasın: sığmazsa imlecin soluna/üstüne geçer */
+function useClampInOverlay(ref: { current: HTMLElement | null }, x: number, y: number) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const ov = view.overlay;
+    if (!el || !ov) return;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let left = x;
+    let top = y;
+    if (left + w > ov.clientWidth - 4) left = Math.max(4, Math.min(x - w - 30, ov.clientWidth - w - 4));
+    if (top + h > ov.clientHeight - 4) top = Math.max(4, y - h - 34);
+    if (left !== x || top !== y) el.style.transform = `translate(${left}px, ${top}px)`;
+  });
+}
+
 function CursorHint() {
   const cursor = useDraw((s) => s.cursor);
   const hint = useDraw((s) => s.hint);
   const typed = useDraw((s) => s.typed);
   const tool = useSketchUi((s) => s.tool);
   const construction = useSketchUi((s) => s.construction);
+  const el = useRef<HTMLDivElement>(null);
+  useClampInOverlay(el, (cursor?.x ?? 0) + 16, (cursor?.y ?? 0) + 18);
   if (!cursor || tool === 'select' || (!hint && !construction) || typed) return null;
   return (
-    <div className="sk-hint" style={{ transform: `translate(${cursor.x + 16}px, ${cursor.y + 18}px)` }}>
+    <div ref={el} className="sk-hint" style={{ transform: `translate(${cursor.x + 16}px, ${cursor.y + 18}px)` }}>
       {construction && tool !== 'dimension' && <span className="sk-hint-tag">Yardımcı</span>}
       {hint}
     </div>
@@ -292,6 +316,7 @@ function TypedBox() {
   const typed = useDraw((s) => s.typed);
   const cursor = useDraw((s) => s.cursor);
   const refs = [useRef<HTMLInputElement>(null), useRef<HTMLInputElement>(null)];
+  const box = useRef<HTMLDivElement>(null);
   const active = typed?.active ?? 0;
   useEffect(() => {
     const el = refs[active]?.current;
@@ -301,8 +326,9 @@ function TypedBox() {
       el.setSelectionRange(n, n);
     }
   }, [typed?.kind, active]); // refs sabit
-  if (!typed) return null;
   const pos = cursor ?? { x: 40, y: 40 };
+  useClampInOverlay(box, pos.x + 18, pos.y + 20);
+  if (!typed) return null;
   const labels = typed.kind === 'rect' ? ['G', 'Y'] : typed.kind === 'circle' ? ['R'] : ['L'];
   const titles = typed.kind === 'rect' ? ['Genişlik', 'Yükseklik'] : typed.kind === 'circle' ? ['Yarıçap'] : ['Uzunluk'];
   const onKey = (i: number) => (e: RKeyboardEvent<HTMLInputElement>) => {
@@ -320,6 +346,7 @@ function TypedBox() {
   };
   return (
     <div
+      ref={box}
       className="sk-typed"
       style={{ transform: `translate(${pos.x + 18}px, ${pos.y + 20}px)` }}
       onPointerDown={(e) => e.stopPropagation()}
@@ -331,6 +358,8 @@ function TypedBox() {
             ref={refs[i]}
             value={v}
             inputMode="decimal"
+            enterKeyHint={i < typed.values.length - 1 ? 'next' : 'done'}
+            autoComplete="off"
             onFocus={() => i !== active && setTyped({ ...typed, active: i })}
             onChange={(e) => {
               const values = [...typed.values];
@@ -344,6 +373,9 @@ function TypedBox() {
         </label>
       ))}
       <span className="sk-typed-unit">mm</span>
+      <button type="button" className="sk-touch-ok" aria-label="Uygula" onPointerDown={(e) => e.preventDefault()} onClick={() => commitTyped()}>
+        ✓
+      </button>
       <span className="sk-typed-help">
         <kbd>Enter</kbd>
         {typed.values.length > 1 && <kbd>Tab</kbd>}

@@ -14,6 +14,7 @@ import { SketchInspector } from '../sketch/SketchInspector';
 import { confirmCancel } from '../sketch/SketchToolbar';
 import { CIcon } from './commandIcons';
 import { acceptMateSession, cancelMateSession, mateSessionAdded } from './commands';
+import { useMobileUi } from '../mobile/mobileStore';
 import './command.css';
 
 export type CommandKind = 'sketch' | 'feature' | 'mate' | null;
@@ -115,6 +116,7 @@ export function CommandPanel() {
         <span className="cmd-panel-title" title={a.title}>
           {a.title}
         </span>
+        <SheetToggle />
         <OkCancel a={a} />
       </header>
       {kind === 'feature' && a.okDisabled && <div className="cmd-panel-msg">{a.okDisabled}</div>}
@@ -124,6 +126,24 @@ export function CommandPanel() {
         {kind === 'mate' && <MatePanel />}
       </div>
     </div>
+  );
+}
+
+/** Dar ekranda komut sayfasını başlık satırına daraltır / açar (masaüstünde gizli) */
+function SheetToggle() {
+  const min = useMobileUi((s) => s.sheetMin);
+  return (
+    <button
+      type="button"
+      className={`cmd-sheet-toggle ${min ? 'min' : ''}`}
+      aria-label={min ? 'Komut panelini aç' : 'Komut panelini daralt'}
+      aria-expanded={!min}
+      onClick={() => useMobileUi.getState().set({ sheetMin: !min })}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+        <path d="M3 5.5 7 9.5 11 5.5" />
+      </svg>
+    </button>
   );
 }
 
