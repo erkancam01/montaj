@@ -1,3 +1,4 @@
+import { featureIcon } from '@/core/features/registry';
 // Özellik türü ikonları (16×16, currentColor)
 import type { ReactNode } from 'react';
 import type { FeatureType } from '@/core/types';
@@ -104,8 +105,7 @@ export function FIcon({ name, size }: { name: IconName; size?: number }) {
   return <Svg size={size}>{PATHS[name]}</Svg>;
 }
 
-/** Özelliğin ikon adı (kesme extrude'u ayrı ikonla) */
+/** Özelliğin simge adı (kesme extrude'u ayrı simgeyle): kural core/features/registry.ts'te */
 export function featureIconName(f: { type: FeatureType; operation?: string }): IconName {
-  if ((f.type === 'extrude' || f.type === 'revolve') && f.operation === 'cut') return f.type === 'extrude' ? 'cut' : 'revolve';
-  return f.type;
+  return featureIcon(f);
 }

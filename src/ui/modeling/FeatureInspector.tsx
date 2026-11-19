@@ -1,5 +1,6 @@
 // Sağ panel: açık özellik taslağının formu. Her değişiklik taslağa yazılır (canlı önizleme);
 // Uygula geçmişe işler, İptal taslağı atar.
+import { featureLabel } from '@/core/features/registry';
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { worldFaceGeom } from '@/core/geometry/faceGeometry';
@@ -7,7 +8,6 @@ import {
   applyFeature,
   BASE_PLANES,
   cancelFeature,
-  FEATURE_LABELS,
   planeFromFace,
   updateFeatureDraft,
   worldPlaneToBody,
@@ -228,7 +228,7 @@ function FeatureForm({ bodyId, isNew }: { bodyId: string; isNew: boolean }) {
 
   if (!draft) return null;
   const invalid = validate(draft, body, ui);
-  const label = draft.type === 'extrude' && draft.operation === 'cut' ? 'Kesme' : FEATURE_LABELS[draft.type];
+  const label = featureLabel(draft as Feature & { operation?: string });
 
   const onApply = () => {
     if (invalid) return;

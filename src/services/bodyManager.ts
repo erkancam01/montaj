@@ -13,7 +13,7 @@ import { computeAndCacheOrigins, dropOrigins } from '@/core/modeling/faceOrigin'
 import { resolveBody, sourcesKey } from '@/core/modeling/externalRefs';
 import { liveSourcesOf } from '@/core/modeling/refLocks';
 import { initSketchSolver, isSketchSolverReady } from '@/core/sketch/solver';
-import { gizmoBusy } from '@/ui/viewport/sceneRefs';
+import { gizmoBusy } from '@/state/interaction';
 
 export { faceArea, matchFace };
 

@@ -7,36 +7,32 @@ yıllarca SolidWorks 2022 kullanmıştır: arayüz ve davranış kararlarında S
 ## Çalıştırma
 - `npm install` (postinstall `scripts/copy-occt.mjs` occt-import-js dosyalarını `public/`'e kopyalar)
 - `npm run dev` → http://localhost:5173 (`.claude/launch.json`: "step-montaj")
-- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:mates` (mate çözücü testleri) · `npm run test:origins` (yüz kökeni / topolojik ad testleri)
+- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:expr` · `npm run test:mates` · `npm run test:origins`
 
 ## Yığın
 Vite 8, React 19, TypeScript, three r187, @react-three/fiber 9, drei 10, zustand 5, idb-keyval, jszip,
 occt-import-js (STEP okuma, `public/` altında klasik worker), replicad + replicad-opencascadejs (modelleme
 çekirdeği, ~22 MB wasm, modül worker, tembel yüklenir), @salusoft89/planegcs (sketch kısıt çözücü).
-Sahne Z-yukarı (`src/setup.ts`), birim mm. Proje tarayıcıda IndexedDB'de otomatik saklanır; taşımak için
+Sahne Z-yukarı (`src/app/setup.ts`), birim mm. Proje tarayıcıda IndexedDB'de otomatik saklanır; taşımak için
 "Projeyi kaydet (.zip)".
 
-## Mimari (önemli dosyalar)
-- `src/types.ts`, `src/modeling/types.ts`: Doc { files, instances, parts, mates, groups, bodies }.
-  Instance (dünya dönüşümü) → Part (instance'a göre yerel). `Part.fixed` = sabit (f).
-- `src/store/useAssembly.ts`: zustand; commit → pruneBodies/cleanupGroups → mate çözümü. updateLive (canlı sürükleme).
-- `src/lib/mateSolver.ts`: gövde bazlı Gauss–Seidel; sabit parçalar hiç taşınmaz; sürüklenen gövde "held".
-  `src/lib/dof.ts` serbestlik, `src/lib/partStatus.ts` (f)/(-) işaretleri.
-- `src/lib/rigid.ts`: rijit gruplar. `src/lib/faceGeometry.ts`: yüz tanıma (düzlem/silindir).
-- `src/modeling/`: actions (gövde/sketch/özellik oturumları), bodyManager (çekirdekte yeniden üretim, yüz
-  kökeni + imzayla yeniden eşleme; faceOrigin = topolojik ad: özellik+sketch eğrisi/kapak, faceMatch), externalRefs/refLocks (başka parçalardan canlı projeksiyon, bağlı gövde kilidi).
-- `src/kernel/`: replicad worker (build, mesh, STEP export). `src/sketch/`: planegcs çözücü, bölgeler, oturum.
-- Arayüz: `src/components/Toolbar.tsx` (sekmeli komut çubuğu), `src/components/command/` (komut paneli, onay
-  köşesi, bağlam kutusu, sağ tık ve S menüsü), `PartTree.tsx` (tek tasarım ağacı),
-  `viewport/CadControls.ts` (SolidWorks fare şeması), `viewport/DragController.tsx` (sol-sürükle taşı,
-  sağ-sürükle döndür, mate'e göre kısıtlı), `src/lib/viewCommands.ts` + `hooks/useViewShortcuts.ts` (Ctrl+1…8, Space).
+## Mimari
+Katmanlar ve "neyi nerede değiştiririm" tablosu: **`ARCHITECTURE.md`** (önce onu oku). Özet:
+`core` (saf hesap, React yok) ← `state` (zustand store + eylemler) ← `services` (çekirdek worker, IO, bodyManager) ←
+`ui` (React). Bir katman yalnız altındakileri import eder; import'lar `@/` ile (`@/core/...`). Yeni dosya eklerken
+doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui import'u girmemeli.
 
-- Parametreler: `src/lib/expr.ts` (güvenli ifade değerlendirici), `src/modeling/params.ts` (applyParameters: her
-  commit'te ifadeli sketch ölçüleri `SkConstraint.expr`, özellik alanları `Feature.exprs`, mate `offsetExpr/angleExpr`
-  hesaplanır; değişen sketch başsız çözülür), `src/components/params/` (ParamsDialog, ExprField). `npm run test:expr`.
-  Model parametreleri: ölçülerde `SkConstraint.name`, özellik alanlarında `Feature.pnames` (assignModelNames her
-  commit'te d1, d2… atar); `modelParams(doc)`, `allParamLikes(doc)` (kullanıcı + model adları tek ifade grafiği),
-  `updateModelParam` (tablodan değişiklik; ölçüde sketch hemen çözülür).
+- Veri modeli `src/core/types/` (Doc { files, instances, parts, mates, groups, bodies, parameters }).
+  Instance (dünya dönüşümü) → Part (instance'a göre yerel). `Part.fixed` = sabit (f).
+- Özellik tanımları TEK yerde: `src/core/features/registry.ts` (ad, simge, varsayılanlar, parametre alanları,
+  bağımlılık, araç çubuğu sırası). Geometri: `src/services/kernel/build.ts`; form: `src/ui/modeling/FeatureInspector.tsx`.
+- Tema TEK yerde: `src/ui/theme/tokens.css` (CSS değişkenleri). Yeni stil yazarken sabit renk değil `var(--…)` kullan.
+- Store `src/state/useAssembly.ts`: commit → pruneBodies/cleanupGroups → applyParameters → mate çözümü; updateLive.
+- Mate çözücü `src/core/assembly/mateSolver.ts` (gövde bazlı Gauss–Seidel; sabitler hiç taşınmaz; sürüklenen "held").
+- Parametreler: `src/core/math/expr.ts` (ifade), `src/core/modeling/params.ts` (applyParameters, model parametreleri
+  d1, d2… = `SkConstraint.name` / `Feature.pnames`; `modelParams`, `allParamLikes`, `updateModelParam`),
+  arayüz `src/ui/params/`.
+- Yüz kökeni (topolojik ad) `src/core/modeling/faceOrigin.ts` + `faceMatch.ts`; yeniden eşleme `src/services/bodyManager.ts`.
 
 ## Çalışma kuralları
 - Kullanıcı her şeyin tek sohbette yürümesini istiyor: ayrı Claude oturumu açma; paralel iş gerekiyorsa bu

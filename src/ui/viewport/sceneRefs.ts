@@ -10,22 +10,8 @@ export const sceneRefs: {
   radius: number;
 } = { root: null, gizmo: null, radius: 500 };
 
-let gizmoDragging = false;
-let lastGizmoUp = 0;
-
-export function markGizmoDown() {
-  gizmoDragging = true;
-}
-
-export function markGizmoUp() {
-  gizmoDragging = false;
-  lastGizmoUp = performance.now();
-}
-
-/** Gizmo ile etkileşim sürüyor ya da az önce bitti: sahne tıklamaları seçim değiştirmesin */
-export function gizmoBusy(): boolean {
-  return gizmoDragging || performance.now() - lastGizmoUp < 250;
-}
+// Gizmo bayrakları durum katmanındadır (servisler de okur); arayüz buradan da erişebilsin diye yeniden dışa açılır
+export { gizmoBusy, markGizmoDown, markGizmoUp } from '@/state/interaction';
 
 /** Raycast'ten muaf tutulacak nesneler için */
 export function noRaycast() {}

@@ -10,7 +10,7 @@
   height: 52px;
   padding: 4px;
   background: rgba(28, 32, 38, 0.88);
-  border: 1px solid var(--border-strong, #3a414b);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
   user-select: none;
@@ -31,7 +31,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  color: var(--text, #d7dbe0);
+  color: var(--text);
   font: inherit;
   font-size: 10px;
   line-height: 1;
@@ -50,12 +50,12 @@
 }
 
 .touch-btn:active {
-  background: var(--panel-3, #2a3038);
+  background: var(--panel-3);
 }
 
 .touch-btn.on {
   background: var(--accent-soft, rgba(47, 111, 237, 0.18));
-  border-color: var(--accent, #2f6fed);
+  border-color: var(--accent);
   color: #fff;
 }
 
@@ -63,5 +63,5 @@
   width: 1px;
   height: 28px;
   margin: 0 2px;
-  background: var(--border-strong, #3a414b);
+  background: var(--border-strong);
 }

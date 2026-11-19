@@ -1,6 +1,7 @@
 // Kullanıcı parametrelerini belgeye uygular: ifadeli sketch ölçüleri, özellik alanları ve mate ofset/açıları
 // hesaplanan değerlerle güncellenir; ölçüsü değişen sketch'ler başsız çözülür. Store commit'i her değişiklikte
 // çağırır (tek geri al adımı); sonrasında bodyManager gövdeleri yeniden üretir, mate'ler yeni yüzlere oturur.
+import { featureFields } from '@/core/features/registry';
 import { evalParams, tryEvalExpr, type ParamEval, type ParamLike } from '@/core/math/expr';
 import { initSketchSolver, isSketchSolverReady, solveSketch } from '@/core/sketch/solver';
 import type { Body, Doc, Feature, Mate, ParamUnit, SkConstraint, SketchFeature } from '@/core/types';
@@ -72,47 +73,6 @@ const DIM_LABELS: Partial<Record<SkConstraint['type'], string>> = {
   angle: 'Açı',
 };
 const isDim = (c: SkConstraint) => c.type in DIM_LABELS && typeof c.value === 'number';
-
-interface FieldDef {
-  field: string;
-  label: string;
-  unit: ParamUnit;
-}
-
-/** Özelliğin tabloda gösterilen (etkin) sayısal alanları */
-export function featureFields(f: Feature): FieldDef[] {
-  const mm = (field: string, label: string): FieldDef => ({ field, label, unit: 'mm' });
-  switch (f.type) {
-    case 'extrude':
-      if (f.throughAll) return [];
-      return f.extent === 'twoSides' ? [mm('distance', 'Mesafe'), mm('distance2', 'Mesafe 2')] : [mm('distance', 'Mesafe')];
-    case 'revolve':
-      return [{ field: 'angle', label: 'Açı', unit: 'deg' }];
-    case 'fillet':
-      return [mm('radius', 'Yarıçap')];
-    case 'chamfer':
-      return [mm('distance', 'Pah')];
-    case 'hole': {
-      const out = [mm('diameter', 'Çap')];
-      if (!f.throughAll) out.push(mm('depth', 'Derinlik'));
-      if (f.holeType === 'counterbore') out.push(mm('cbDiameter', 'Havşa başı çapı'), mm('cbDepth', 'Havşa başı derinliği'));
-      if (f.holeType === 'countersink') out.push(mm('csDiameter', 'Havşa çapı'), { field: 'csAngle', label: 'Havşa açısı', unit: 'deg' });
-      return out;
-    }
-    case 'linearPattern': {
-      const out: FieldDef[] = [{ field: 'count1', label: 'Adet 1', unit: 'adet' }, mm('spacing1', 'Aralık 1')];
-      if (f.count2 > 1) out.push({ field: 'count2', label: 'Adet 2', unit: 'adet' }, mm('spacing2', 'Aralık 2'));
-      return out;
-    }
-    case 'circularPattern':
-      return [
-        { field: 'count', label: 'Adet', unit: 'adet' },
-        { field: 'angle', label: 'Toplam açı', unit: 'deg' },
-      ];
-    default:
-      return [];
-  }
-}
 
 /**
  * Adı olmayan ölçü ve özellik alanlarına otomatik model parametresi adı verir (d1, d2…). Kopyalanmış

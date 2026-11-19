@@ -18,20 +18,13 @@ import { bodyFileId, isBodyFileId, bodyIdOfFile } from '@/core/types';
 import { faceRefWithSig, localPlaneOf } from '@/core/modeling/externalRefs';
 import { ownPartIds, wouldCycle } from '@/core/modeling/refLocks';
 import { Quaternion, Vector3 } from 'three';
+import { BASE_PLANES } from '@/core/modeling/planes';
+import { dependentsOf, FEATURE_LABELS, featureDefaults } from '@/core/features/registry';
 
 const st = () => useAssembly.getState();
 
-export const FEATURE_LABELS: Record<FeatureType, string> = {
-  sketch: 'Sketch',
-  extrude: 'Extrude',
-  revolve: 'Revolve',
-  fillet: 'Radyus',
-  chamfer: 'Pah',
-  hole: 'Delik',
-  linearPattern: 'Doğrusal desen',
-  circularPattern: 'Dairesel desen',
-  mirror: 'Ayna',
-};
+// Özellik tanımları (ad, varsayılanlar, bağımlılıklar) core/features/registry.ts'te; eski import'lar için:
+export { dependentsOf, FEATURE_LABELS };
 
 // ---------------------------------------------------------------- Yardımcılar
 
@@ -75,12 +68,8 @@ export function defaultXDir(normal: Vec3): Vec3 {
   return norm(cross([0, 0, 1], n));
 }
 
-/** Temel düzlemler (gövde-yerel) */
-export const BASE_PLANES: Record<'XY' | 'XZ' | 'YZ', PlaneDef> = {
-  XY: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, 0, 1] },
-  XZ: { origin: [0, 0, 0], xDir: [1, 0, 0], normal: [0, -1, 0] },
-  YZ: { origin: [0, 0, 0], xDir: [0, 1, 0], normal: [1, 0, 0] },
-};
+/** Temel düzlemler (gövde-yerel): tanımı core/modeling/planes.ts */
+export { BASE_PLANES };
 
 function applyT(t: Transform, p: Vec3, isDir: boolean): Vec3 {
   const v = new Vector3(...p).applyQuaternion(new Quaternion(...t.quaternion));
@@ -358,25 +347,6 @@ export function cancelFeature() {
   st().setModeling({ feature: null, pick: null });
 }
 
-/** Özelliğin bağlı olduğu özellikler (sketch'e dayanan extrude/revolve; desen/aynanın kaynakları) */
-export function dependentsOf(body: Body, featureId: string): string[] {
-  const out = new Set<string>();
-  const visit = (id: string) => {
-    for (const f of body.features) {
-      if (out.has(f.id)) continue;
-      const uses =
-        ((f.type === 'extrude' || f.type === 'revolve') && f.sketchId === id) ||
-        ((f.type === 'linearPattern' || f.type === 'circularPattern' || f.type === 'mirror') && f.featureIds.includes(id));
-      if (uses) {
-        out.add(f.id);
-        visit(f.id);
-      }
-    }
-  };
-  visit(featureId);
-  return [...out];
-}
-
 /** Özelliği ve ona bağlı özellikleri siler (geri alınabilir) */
 export function deleteFeature(bodyId: string, featureId: string) {
   const body = getBody(bodyId);
@@ -440,38 +410,8 @@ export function bodyHasSolid(bodyId: string): boolean {
   );
 }
 
+/** Yeni özellik taslağı: varsayılan değerler core/features/registry.ts'teki tanımdan */
 export function newFeatureDraft(bodyId: string, type: Exclude<FeatureType, 'sketch'>): Feature {
   const sketchId = lastSketchId(bodyId) ?? '';
-  const op = bodyHasSolid(bodyId) ? 'add' : 'add';
-  switch (type) {
-    case 'extrude':
-      return { ...baseOf(bodyId, type), type, sketchId, profilePoints: [], extent: 'oneSide', distance: 10, distance2: 10, reverse: false, throughAll: false, operation: op };
-    case 'revolve':
-      return { ...baseOf(bodyId, type), type, sketchId, profilePoints: [], axisLineId: '', angle: 360, reverse: false, operation: op };
-    case 'fillet':
-      return { ...baseOf(bodyId, type), type, edges: [], radius: 2 };
-    case 'chamfer':
-      return { ...baseOf(bodyId, type), type, edges: [], distance: 1 };
-    case 'hole':
-      return {
-        ...baseOf(bodyId, type),
-        type,
-        plane: BASE_PLANES.XY,
-        points: [],
-        holeType: 'simple',
-        diameter: 6,
-        depth: 10,
-        throughAll: true,
-        cbDiameter: 11,
-        cbDepth: 6,
-        csDiameter: 12,
-        csAngle: 90,
-      };
-    case 'linearPattern':
-      return { ...baseOf(bodyId, type), type, featureIds: [], dir1: [1, 0, 0], count1: 3, spacing1: 20, dir2: [0, 1, 0], count2: 1, spacing2: 20 };
-    case 'circularPattern':
-      return { ...baseOf(bodyId, type), type, featureIds: [], axisOrigin: [0, 0, 0], axisDir: [0, 0, 1], count: 4, angle: 360 };
-    case 'mirror':
-      return { ...baseOf(bodyId, type), type, featureIds: [], plane: BASE_PLANES.YZ };
-  }
+  return { ...baseOf(bodyId, type), ...featureDefaults(type, sketchId) } as Feature;
 }

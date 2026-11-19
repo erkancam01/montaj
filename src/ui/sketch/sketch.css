@@ -181,7 +181,7 @@
 }
 
 .sk-status.bad {
-  color: #ffb3b5;
+  color: var(--danger-text-strong);
   background: var(--danger-soft);
   border-color: rgba(229, 72, 77, 0.55);
 }
@@ -312,12 +312,12 @@
 
 .sk-dim:hover,
 .sk-dim.hovered {
-  border-color: #ffd98a;
+  border-color: var(--hover);
   color: #fff3d6;
 }
 
 .sk-dim.selected {
-  border-color: #ffb547;
+  border-color: var(--sel);
   background: rgba(60, 42, 14, 0.92);
   color: #ffd79a;
 }
@@ -325,7 +325,7 @@
 .sk-dim.conflict {
   border-color: var(--danger);
   background: rgba(60, 22, 25, 0.92);
-  color: #ffb3b5;
+  color: var(--danger-text-strong);
 }
 
 .sk-dim.preview {
@@ -389,20 +389,20 @@
 .sk-badge:hover,
 .sk-badge.hovered {
   background: rgba(70, 56, 24, 0.95);
-  border-color: #ffd98a;
+  border-color: var(--hover);
   color: #ffe3a8;
 }
 
 .sk-badge.selected {
-  background: #ffb547;
-  border-color: #ffb547;
-  color: #1c2026;
+  background: var(--sel);
+  border-color: var(--sel);
+  color: var(--panel);
 }
 
 .sk-badge.conflict {
   background: rgba(60, 22, 25, 0.95);
   border-color: var(--danger);
-  color: #ff9a9d;
+  color: var(--danger-text);
 }
 
 .sk-hint {
@@ -414,7 +414,7 @@
   border-radius: 4px;
   background: rgba(22, 25, 29, 0.9);
   border: 1px solid var(--border-strong);
-  color: #cfe0ff;
+  color: var(--accent-text);
   font-size: 11.5px;
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -424,7 +424,7 @@
   padding: 0 4px;
   border-radius: 3px;
   background: var(--accent-soft);
-  color: #9dbcff;
+  color: var(--accent-text-2);
   font-size: 10.5px;
 }
 
@@ -514,7 +514,7 @@
   align-items: center;
   gap: 4px;
   background: var(--accent-soft);
-  color: #9dbcff;
+  color: var(--accent-text-2);
 }
 
 .sk-new {
@@ -557,7 +557,7 @@
   background: #5ea8ff;
 }
 .sk-insp-status.bad {
-  color: #ffb3b5;
+  color: var(--danger-text-strong);
   border-color: rgba(229, 72, 77, 0.55);
   background: var(--danger-soft);
 }
@@ -661,7 +661,7 @@
 }
 
 .sk-crow.conflict .sk-crow-icon {
-  color: #ff9a9d;
+  color: var(--danger-text);
 }
 
 .sk-crow-body {
@@ -680,7 +680,7 @@
 }
 
 .sk-crow.conflict .sk-crow-name {
-  color: #ffb3b5;
+  color: var(--danger-text-strong);
 }
 
 .sk-crow-flag {
@@ -753,7 +753,7 @@
 
 .sk-crow-del:hover {
   background: var(--danger-soft);
-  color: #ff9a9d;
+  color: var(--danger-text);
 }
 
 .sk-insp-actions {

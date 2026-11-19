@@ -135,7 +135,7 @@
 .cmd-btn.active {
   background: var(--accent-soft);
   border-color: var(--accent);
-  color: #cfe0ff;
+  color: var(--accent-text);
 }
 
 .cmd-btn-icon {
@@ -294,12 +294,12 @@
 }
 
 .pmenu-item.primary .pmenu-label {
-  color: #cfe0ff;
+  color: var(--accent-text);
   font-weight: 600;
 }
 
 .pmenu-item.danger {
-  color: #ff9a9d;
+  color: var(--danger-text);
 }
 
 .pmenu-icon {
@@ -697,7 +697,7 @@
   padding: 0 5px;
   border-radius: 8px;
   background: var(--accent-soft);
-  color: #cfe0ff;
+  color: var(--accent-text);
   font-size: 10.5px;
   line-height: 16px;
 }

@@ -1,9 +1,10 @@
 // Sol komut paneli: sketch / özellik / mate komutu açıkken ağacın yerinde o komutun ayarları; üstte yeşil ✓
 // (onayla) ve kırmızı ✕ (iptal). Sahnenin sağ üst köşesindeki onay köşesi (ConfirmCorner) de aynı eylemleri kullanır.
+import { featureLabel } from '@/core/features/registry';
 import { useShallow } from 'zustand/react/shallow';
 import { getFaceGeom } from '@/core/geometry/faceGeometry';
 import { FACE_KIND_LABELS } from '@/core/assembly/mateMeta';
-import { cancelFeature, FEATURE_LABELS, finishSketch } from '@/state/modelingActions';
+import { cancelFeature, finishSketch } from '@/state/modelingActions';
 import { useAssembly } from '@/state/useAssembly';
 import type { Feature } from '@/core/types';
 import { IconMate } from '@/ui/icons/icons';
@@ -43,7 +44,7 @@ export function useCommandActions(): CommandActions | null {
   const featureTitle = useAssembly((s) => {
     const d = s.modeling.feature?.draft;
     if (!d) return '';
-    return d.type === 'extrude' && d.operation === 'cut' ? 'Kesme' : FEATURE_LABELS[d.type];
+    return featureLabel(d as Feature & { operation?: string });
   });
   const sketchName = useAssembly((s) => s.modeling.sketch?.data.name ?? 'Sketch');
   if (kind === 'sketch') {

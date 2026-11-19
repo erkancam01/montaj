@@ -17,14 +17,15 @@ import {
 import { withFaceSig } from '@/services/bodyManager';
 import { pickFace } from '@/state/assemblyActions';
 import { useAssembly, type AssemblyState } from '@/state/useAssembly';
-import type { FaceRef, FeatureType } from '@/core/types';
+import type { FaceRef } from '@/core/types';
 import { bodyIdOfFile, isBodyFileId } from '@/core/types';
 import { sketchRegions } from '@/ui/modeling/geom';
 import { useCommandUi, type LastCommand } from '@/ui/commands/commandStore';
 
 const st = () => useAssembly.getState();
 
-export type FeatureTool = Exclude<FeatureType, 'sketch'> | 'cut';
+export type { FeatureTool } from '@/core/features/registry';
+import type { FeatureTool } from '@/core/features/registry';
 
 // ---------------------------------------------------------------- Son komut
 

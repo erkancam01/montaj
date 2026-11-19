@@ -1,0 +1,46 @@
+/* ================================================================ Tema belirteçleri
+ * Uygulamanın TÜM renk, boyut ve köşe değerleri burada. Arayüz rengi değiştirmek için yalnız bu dosya.
+ * (3B sahnedeki çizim renkleri JS'tedir: ui/sketch/SketchLayer.tsx SK_COLORS, ui/viewport/ViewCube.tsx.)
+ */
+:root {
+  --bg: #16191d;
+  --panel: #1c2026;
+  --panel-2: #22272e;
+  --panel-3: #2a3038;
+  --border: #2c323a;
+  --border-strong: #3a414b;
+  --text: #d7dbe0;
+  --text-dim: #8b939e;
+  --text-faint: #5f6772;
+  --accent: #2f6fed;
+  --accent-hover: #4380f5;
+  --accent-soft: rgba(47, 111, 237, 0.18);
+  --danger: #e5484d;
+  --danger-soft: rgba(229, 72, 77, 0.14);
+  --warn: #d9a441;
+  --ok: #46a758;
+  --axis-x: #e5534b;
+  --axis-y: #57ab5a;
+  --axis-z: #4a8af4;
+  --radius: 4px;
+  --row-h: 24px;
+
+  /* --- metin tonları (uyarı / bilgi kutuları) --- */
+  --danger-text: #ff9a9d;
+  --danger-text-strong: #ffb3b5;
+  --accent-text: #cfe0ff;
+  --accent-text-2: #9dbcff;
+  --ok-text: #8fd19e;
+  --warn-text: #e6c47e;
+  --sel: #ffb547;
+  --hover: #ffd98a;
+
+  /* --- parametre / ifade (ƒx) rengi --- */
+  --param: #b18cff;
+  --param-text: #d9c8ff;
+
+  /* --- pencere / diyalog yüzeyleri --- */
+  --dialog-bg: #1f242c;
+  --input-bg: #151920;
+  color-scheme: dark;
+}

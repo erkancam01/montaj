@@ -73,11 +73,11 @@
 
 .mdl-menu-item:hover {
   background: var(--accent-soft);
-  color: #cfe0ff;
+  color: var(--accent-text);
 }
 
 .mdl-menu-item-primary {
-  color: #cfe0ff;
+  color: var(--accent-text);
   font-weight: 600;
   background: var(--accent-soft);
 }
@@ -166,7 +166,7 @@
   padding: 0 6px;
   border-radius: 9px;
   background: var(--danger-soft);
-  color: #ff9a9d;
+  color: var(--danger-text);
   line-height: 18px;
 }
 
@@ -306,7 +306,7 @@
 
 .ft-btn.danger:hover:not(:disabled) {
   background: var(--danger-soft);
-  color: #ff9a9d;
+  color: var(--danger-text);
 }
 
 .ft-btn:disabled {
@@ -438,7 +438,7 @@
   padding: 0 6px;
   border-radius: 3px;
   background: rgba(70, 167, 88, 0.16);
-  color: #8fd19e;
+  color: var(--ok-text);
   font-size: 11px;
   line-height: 18px;
 }
@@ -508,7 +508,7 @@
   border: 1px solid var(--danger);
   border-radius: var(--radius);
   background: var(--danger-soft);
-  color: #ff9a9d;
+  color: var(--danger-text);
   font-size: 12px;
   overflow-wrap: anywhere;
   user-select: text;
@@ -529,7 +529,7 @@
 }
 
 .fi-ready {
-  color: #8fd19e;
+  color: var(--ok-text);
 }
 
 .fi-actions {

@@ -32,10 +32,11 @@ import { openParamsDialog } from '@/ui/params/ParamsDialog';
 import { selectedGroupId } from '@/ui/assembly/GroupList';
 import { importWithConfirm, isDocEmpty } from '@/ui/shell/importWithConfirm';
 import { IconGroup, IconMate, IconPlus, IconRedo, IconUndo, IconUngroup } from '@/ui/icons/icons';
-import { FIcon, type IconName } from '@/ui/icons/featureIcons';
+import { FIcon } from '@/ui/icons/featureIcons';
 import { confirmCancel, SKETCH_TOOLS, StatusPill } from '@/ui/sketch/SketchToolbar';
 import { IconConstruction, ToolIcon } from '@/ui/icons/sketchIcons';
 import { chooseTool, constructionKey, resetDraw } from '@/ui/sketch/tools';
+import { FEATURE_TOOLS } from '@/core/features/registry';
 import '@/ui/commands/command.css';
 
 const MOVE_STEPS = [0.1, 0.5, 1, 5, 10, 50, 100];
@@ -400,17 +401,8 @@ function QuickAccess() {
 
 // ---------------------------------------------------------------- Özellikler
 
-export const FEATURE_TOOLS: { tool: FeatureTool; label: string; icon: IconName; needs: 'sketch' | 'solid' | 'sketch+solid'; title: string }[] = [
-  { tool: 'extrude', label: 'Extrude', icon: 'extrude', needs: 'sketch', title: 'Sketch profilini doğrusal uzatarak katı ekle' },
-  { tool: 'cut', label: 'Kesme', icon: 'cut', needs: 'sketch+solid', title: 'Sketch profilini uzatıp gövdeden çıkar' },
-  { tool: 'revolve', label: 'Revolve', icon: 'revolve', needs: 'sketch', title: 'Sketch profilini bir eksen etrafında döndür' },
-  { tool: 'fillet', label: 'Radyus', icon: 'fillet', needs: 'solid', title: 'Seçilen kenarları yuvarlat' },
-  { tool: 'chamfer', label: 'Pah', icon: 'chamfer', needs: 'solid', title: 'Seçilen kenarlara pah kır' },
-  { tool: 'hole', label: 'Delik', icon: 'hole', needs: 'solid', title: 'Düz bir yüzeye delik aç' },
-  { tool: 'linearPattern', label: 'Doğrusal desen', icon: 'linearPattern', needs: 'solid', title: 'Özellikleri bir yön boyunca çoğalt' },
-  { tool: 'circularPattern', label: 'Dairesel desen', icon: 'circularPattern', needs: 'solid', title: 'Özellikleri bir eksen etrafında çoğalt' },
-  { tool: 'mirror', label: 'Ayna', icon: 'mirror', needs: 'solid', title: 'Özellikleri ya da gövdeyi bir düzleme göre aynala' },
-];
+/** Özellik komutları: tanımları core/features/registry.ts'te */
+export { FEATURE_TOOLS };
 
 /** Özellik aracını son komut olarak kaydedip başlatır */
 export function runFeatureTool(tool: FeatureTool) {

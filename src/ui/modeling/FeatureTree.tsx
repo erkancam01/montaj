@@ -1,4 +1,5 @@
 // Birleşik ağaçta gövdenin özellik geçmişi (satırlar, sağ tık menüsü, dış referans bandı).
+import { featureLabel } from '@/core/features/registry';
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -7,7 +8,6 @@ import {
   dependentsOf,
   editFeature,
   editSketch,
-  FEATURE_LABELS,
   moveFeature,
   renameFeature,
   setFeatureSuppressed,
@@ -285,8 +285,7 @@ const FeatureRow = memo(function FeatureRow(p: RowProps) {
     f.suppressed ? 'suppressed' : '',
     p.error ? 'has-error' : '',
   ].join(' ');
-  const typeLabel =
-    f.type === 'extrude' && f.operation === 'cut' ? 'Kesme' : f.type === 'revolve' && f.operation === 'cut' ? 'Revolve (kes)' : FEATURE_LABELS[f.type];
+  const typeLabel = featureLabel(f as Feature & { operation?: string });
   const title = p.error
     ? `${f.name} — Hata: ${p.error}`
     : `${typeLabel}: ${f.name}${f.suppressed ? ' (bastırılmış)' : ''} — çift tık: düzenle · F2: yeniden adlandır`;
