@@ -3,7 +3,6 @@ import { useFrame, useThree, type RootState } from '@react-three/fiber';
 import {
   Box3,
   Group,
-  MathUtils,
   Sphere,
   Vector3,
   type Material,
@@ -20,6 +19,8 @@ import { moveRigid, setTransform } from '../../store/actions';
 import { useAssembly } from '../../store/useAssembly';
 import type { Quat, Selection } from '../../types';
 import { sceneRefs } from './sceneRefs';
+import { CadControls } from './CadControls';
+import { fitDistance, registerViewControls, VIEW_DURATION } from '../../lib/viewCommands';
 
 /** OrbitControls'tan kullandığımız alanlar */
 interface OrbitLike {
@@ -97,23 +98,26 @@ function fit(state: RootState, target: 'all' | 'selection') {
 
   const cam = state.camera as PerspectiveCamera;
   const controls = orbitOf(state);
-  const vfov = MathUtils.degToRad(cam.fov);
-  const hfov = 2 * Math.atan(Math.tan(vfov / 2) * (cam.aspect || 1));
-  const dist = (r / Math.sin(Math.min(vfov, hfov) / 2)) * 1.1;
+  const dist = fitDistance(cam, r);
 
   const dir = cam.position.clone().sub(controls ? controls.target : new Vector3());
   if (!(dir.lengthSq() > 1e-12) || !Number.isFinite(dir.x + dir.y + dir.z)) dir.copy(FALLBACK_DIR);
   dir.normalize();
 
-  cam.position.copy(sphere.center).addScaledVector(dir, dist);
   if (target === 'all') sceneRefs.radius = r;
-  if (controls) {
-    controls.target.copy(sphere.center);
-    controls.update();
+  if (controls instanceof CadControls) {
+    // Yönelim korunur, yumuşak geçişle sığdırılır
+    controls.animateTo({ target: sphere.center.clone(), quaternion: cam.quaternion.clone(), distance: dist }, VIEW_DURATION);
   } else {
-    cam.lookAt(sphere.center);
+    cam.position.copy(sphere.center).addScaledVector(dir, dist);
+    if (controls) {
+      controls.target.copy(sphere.center);
+      controls.update();
+    } else {
+      cam.lookAt(sphere.center);
+    }
+    updateClip(cam, sphere.center, true);
   }
-  updateClip(cam, sphere.center, true);
 
   if (target === 'all') useAssembly.setState({ gridCell: niceCell(r) });
 }
@@ -219,9 +223,15 @@ function screenshot(state: RootState): Promise<Blob | null> {
   });
 }
 
-/** viewerApi'yi doldurur, near/far'ı ve sahne yarıçapını günceller */
+/**
+ * SolidWorks tarzı kamera kontrolcüsünü (CadControls) varsayılan kontrol olarak kurar; viewerApi'yi
+ * doldurur, near/far'ı ve sahne yarıçapını günceller
+ */
 export function CameraRig() {
   const get = useThree((s) => s.get);
+  const set = useThree((s) => s.set);
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
   const frame = useRef(0);
   const box = useRef(new Box3());
   const sphere = useRef(new Sphere());
@@ -239,7 +249,24 @@ export function CameraRig() {
     };
   }, [get]);
 
+  // Kamera kontrolcüsü (sol ve sağ tuş kamerayı oynatmaz; bkz. CadControls)
+  useEffect(() => {
+    const ctl = new CadControls(camera as PerspectiveCamera);
+    ctl.connect(gl.domElement);
+    ctl.onFocusMiss = () => fit(get(), 'all');
+    const prev = get().controls;
+    set({ controls: ctl });
+    registerViewControls(ctl);
+    return () => {
+      registerViewControls(null);
+      ctl.dispose();
+      if (get().controls === ctl) set({ controls: prev });
+    };
+  }, [camera, gl, get, set]);
+
   useFrame((state) => {
+    const c = state.controls;
+    if (c instanceof CadControls) c.tick();
     if (frame.current++ % RADIUS_INTERVAL === 0 && sceneRefs.root) {
       box.current.setFromObject(sceneRefs.root);
       if (!box.current.isEmpty()) sceneRefs.radius = Math.max(box.current.getBoundingSphere(sphere.current).radius, 1e-3);

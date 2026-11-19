@@ -1,5 +1,5 @@
 import { Canvas } from '@react-three/fiber';
-import { GizmoHelper, GizmoViewport, OrbitControls } from '@react-three/drei';
+import { GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { NeutralToneMapping } from 'three';
 import { useAssembly } from '../../store/useAssembly';
 import { CameraRig } from './CameraRig';
@@ -11,6 +11,8 @@ import { SceneGrid } from './SceneGrid';
 import { gizmoBusy } from './sceneRefs';
 import { SketchLayer } from '../sketch/SketchLayer';
 import { PickLayer } from '../modeling/PickLayer';
+import { useViewShortcuts } from '../../hooks/useViewShortcuts';
+import { ViewMenu } from './ViewMenu';
 
 const BACKGROUND = '#1e2228';
 
@@ -30,24 +32,30 @@ function onPointerMissed(e: MouseEvent) {
   st.select(null);
 }
 
-/** 3D montaj sahnesi (Z-yukarı, mm) */
+/**
+ * 3D montaj sahnesi (Z-yukarı, mm). Kamera: SolidWorks şeması (CameraRig → CadControls);
+ * görünüm kısayolları ve Space menüsü burada bağlanır.
+ */
 export function Viewport() {
+  useViewShortcuts();
   return (
-    <Canvas camera={CAMERA} gl={GL} dpr={DPR} style={STYLE} onPointerMissed={onPointerMissed}>
-      <color attach="background" args={[BACKGROUND]} />
-      <Lights />
-      <SceneGrid />
-      <SceneContent />
-      <FaceHighlights />
-      <MateCursor />
-      <Gizmo />
-      <SketchLayer />
-      <PickLayer />
-      <CameraRig />
-      <OrbitControls makeDefault />
-      <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
-        <GizmoViewport axisColors={['#e5484d', '#30a46c', '#3e7bfa']} labelColor="#ffffff" />
-      </GizmoHelper>
-    </Canvas>
+    <>
+      <Canvas camera={CAMERA} gl={GL} dpr={DPR} style={STYLE} onPointerMissed={onPointerMissed}>
+        <color attach="background" args={[BACKGROUND]} />
+        <Lights />
+        <SceneGrid />
+        <SceneContent />
+        <FaceHighlights />
+        <MateCursor />
+        <Gizmo />
+        <SketchLayer />
+        <PickLayer />
+        <CameraRig />
+        <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
+          <GizmoViewport axisColors={['#e5484d', '#30a46c', '#3e7bfa']} labelColor="#ffffff" />
+        </GizmoHelper>
+      </Canvas>
+      <ViewMenu />
+    </>
   );
 }

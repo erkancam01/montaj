@@ -9,9 +9,7 @@ import {
   DoubleSide,
   Float32BufferAttribute,
   Matrix4,
-  MOUSE,
   PointsMaterial,
-  Quaternion,
   Shape,
   ShapeGeometry,
   Vector2,
@@ -28,6 +26,7 @@ import { dimGeometry } from './annotations';
 import { boundsOf, curvePolyline, isCurve, pointMap, TAU, type PtMap } from './geom';
 import { onKeyDown, onPointerDown, onPointerLeave, onPointerMove, onPointerUp, resetController, useDraw } from './tools';
 import { pxSize, updateLabels, view, worldToSketch, type WorldPlane } from './view';
+import { lookAtPlane } from '../../lib/viewCommands';
 
 // ---------------------------------------------------------------- Renkler
 
@@ -142,23 +141,11 @@ function StaticSketch({ bodyId, data, instKey }: { bodyId: string; data: SketchF
 interface OrbitLike {
   target: Vector3;
   update(): void;
-  mouseButtons: { LEFT?: number | null; MIDDLE?: number | null; RIGHT?: number | null };
 }
 
 function orbit(c: unknown): OrbitLike | null {
   const o = c as Partial<OrbitLike> | null;
-  return o && o.target instanceof Vector3 && typeof o.update === 'function' && o.mouseButtons ? (o as OrbitLike) : null;
-}
-
-interface CamAnim {
-  t0: number;
-  dur: number;
-  fromTarget: Vector3;
-  toTarget: Vector3;
-  fromDir: Vector3;
-  rot: Quaternion;
-  fromDist: number;
-  toDist: number;
+  return o && o.target instanceof Vector3 && typeof o.update === 'function' ? (o as OrbitLike) : null;
 }
 
 function ActiveSketch() {
@@ -175,7 +162,6 @@ function ActiveSketch() {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
   const controls = useThree((s) => s.controls);
-  const anim = useRef<CamAnim | null>(null);
   const aligned = useRef(false);
   const tool = useSketchUi((s) => s.tool);
 
@@ -212,48 +198,17 @@ function ActiveSketch() {
       const fov = ((cam.fov ?? 45) * Math.PI) / 180;
       toDist = Math.max((ext * 0.75) / Math.tan(fov / 2), 20);
     }
-    // Normal Z'ye paralelse OrbitControls'ün yukarı ekseni (Z) bakış yönüyle çakışır: sketch y'si ekranda
-    // yukarı görünsün diye çok küçük bir eğim verilir
-    const toDir = wp.n.clone();
-    const nz = wp.n.z;
-    if (Math.abs(nz) > 0.999) toDir.addScaledVector(wp.y, -Math.sign(nz) * 0.002).normalize();
-    const fromDir = cam.position.clone().sub(ctl.target);
-    const fromDist = fromDir.length() || 1;
-    fromDir.normalize();
-    anim.current = {
-      t0: performance.now(),
-      dur: 450,
-      fromTarget: ctl.target.clone(),
-      toTarget,
-      fromDir,
-      rot: new Quaternion().setFromUnitVectors(fromDir, toDir),
-      fromDist,
-      toDist,
-    };
+    // Düzleme dik, sketch x'i sağa ve y'si yukarı (yumuşak geçiş; kamera kullanıcı girdisiyle kesilir)
+    lookAtPlane(wp.o, wp.n, { up: wp.y, target: toTarget, distance: toDist, duration: 450, flip: false });
   }, [controls, wp, camera]);
 
-  // Fare düğmeleri: sol = sketch, orta = döndür (Shift+orta: kaydır), sağ = kaydır, tekerlek = yakınlaştır
-  useEffect(() => {
-    const ctl = orbit(controls);
-    if (!ctl) return;
-    const saved = { ...ctl.mouseButtons };
-    ctl.mouseButtons.LEFT = -1;
-    ctl.mouseButtons.MIDDLE = MOUSE.ROTATE;
-    ctl.mouseButtons.RIGHT = MOUSE.PAN;
-    return () => {
-      ctl.mouseButtons.LEFT = saved.LEFT;
-      ctl.mouseButtons.MIDDLE = saved.MIDDLE;
-      ctl.mouseButtons.RIGHT = saved.RIGHT;
-    };
-  }, [controls]);
+  // Fare: kamera tüm uygulamada aynı şemadadır (CadControls: orta = döndür, Ctrl+orta = kaydır,
+  // Shift+orta = yakınlaştır, tekerlek = imlece yakınlaştır). Sol tuş çizim/seçim, sağ tuş menü içindir.
 
   // Canvas DOM girdisi
   useEffect(() => {
     const el = gl.domElement;
-    const down = (e: PointerEvent) => {
-      if (e.button === 1 || e.button === 2) anim.current = null;
-      onPointerDown(e);
-    };
+    const down = (e: PointerEvent) => onPointerDown(e);
     const ctx = (e: MouseEvent) => e.preventDefault();
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointermove', onPointerMove);
@@ -282,17 +237,6 @@ function ActiveSketch() {
 
   useFrame(() => {
     const ctl = orbit(controls);
-    const a = anim.current;
-    if (a && ctl) {
-      const k0 = Math.min(1, (performance.now() - a.t0) / a.dur);
-      const k = 1 - Math.pow(1 - k0, 3);
-      const q = new Quaternion().slerp(a.rot, k);
-      const dir = a.fromDir.clone().applyQuaternion(q);
-      ctl.target.lerpVectors(a.fromTarget, a.toTarget, k);
-      camera.position.copy(ctl.target).addScaledVector(dir, a.fromDist + (a.toDist - a.fromDist) * k);
-      ctl.update();
-      if (k0 >= 1) anim.current = null;
-    }
     // Piksel ölçeği (ok ve etiket boyutları)
     if (ctl && wp) {
       const px = pxSize(worldToSketch(ctl.target));

@@ -237,6 +237,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     selectMode: 'part',
     showEdges: true,
     tool: 'select',
+    invertWheel: false,
   },
 
   setUi: (p) =>

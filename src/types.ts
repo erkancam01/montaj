@@ -173,4 +173,6 @@ export interface UiState {
   showEdges: boolean;
   /** select: normal seçim/gizmo · mate: yüzey seçerek mate kurma */
   tool: 'select' | 'mate';
+  /** Fare tekerleği yakınlaştırma yönünü ters çevir (SolidWorks: ileri = uzaklaş) */
+  invertWheel: boolean;
 }
