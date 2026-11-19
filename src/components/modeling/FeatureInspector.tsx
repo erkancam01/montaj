@@ -151,6 +151,36 @@ function validate(d: Feature, body: Body | undefined, ui: { profileMode: 'all' |
   }
 }
 
+// ---------------------------------------------------------------- Onay (sol panel ✓ ve onay köşesi de kullanır)
+
+/** Açık özellik taslağı uygulanamıyorsa nedeni (açık özellik yoksa da bir metin) */
+export function useFeatureInvalid(): string | null {
+  const draft = useAssembly((s) => s.modeling.feature?.draft);
+  const body = useAssembly((s) => {
+    const f = s.modeling.feature;
+    return f ? s.doc.bodies.find((b) => b.id === f.bodyId) : undefined;
+  });
+  const ui = useModelingUi(useShallow((s) => ({ profileMode: s.profileMode, holeFaceChosen: s.holeFaceChosen })));
+  return draft ? validate(draft, body, ui) : 'Açık özellik yok';
+}
+
+/** Taslak geçerliyse özelliği geçmişe işler */
+export function tryApplyFeature(): boolean {
+  const s = st();
+  const fs = s.modeling.feature;
+  if (!fs) return false;
+  const body = s.doc.bodies.find((b) => b.id === fs.bodyId);
+  const invalid = validate(fs.draft, body, useModelingUi.getState());
+  if (invalid) {
+    s.showToast(invalid, 'error');
+    return false;
+  }
+  restoreEdgeSuppression();
+  useModelingUi.getState().reset();
+  applyFeature();
+  return true;
+}
+
 // ---------------------------------------------------------------- Panel
 
 export function FeatureInspector() {
@@ -200,9 +230,7 @@ function FeatureForm({ bodyId, isNew }: { bodyId: string; isNew: boolean }) {
 
   const onApply = () => {
     if (invalid) return;
-    restoreEdgeSuppression();
-    useModelingUi.getState().reset();
-    applyFeature();
+    tryApplyFeature();
   };
 
   return (

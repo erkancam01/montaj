@@ -6,6 +6,7 @@ import type { Instance } from '../../types';
 import { PartNode } from './PartNode';
 import { sceneRefs } from './sceneRefs';
 import { useRegistryRef } from './useRegistryRef';
+import { ScenePointer } from '../command/ScenePointer';
 
 /** Belgedeki tüm instance'lar; kök grup sceneRefs.root'ta tutulur */
 export function SceneContent() {
@@ -23,6 +24,7 @@ export function SceneContent() {
       {instances.map((inst) => (
         <InstanceNode key={inst.id} inst={inst} />
       ))}
+      <ScenePointer />
     </group>
   );
 }

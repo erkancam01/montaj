@@ -925,8 +925,8 @@ function editable(t: EventTarget | null): boolean {
   return t instanceof HTMLInputElement && !NON_TEXT.has(t.type);
 }
 
+// S, imleç yanındaki kısayol menüsünü açar (command/useCommandKeys); Seç aracına Esc ile dönülür
 const TOOL_KEYS: Record<string, SketchTool> = {
-  s: 'select',
   l: 'line',
   r: 'rect',
   c: 'circle',
