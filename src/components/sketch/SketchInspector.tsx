@@ -64,7 +64,7 @@ export function SketchInspector() {
         <div className="prop-title">Fare ve klavye</div>
         <ul>
           <li>
-            <b>Sol</b> çiz / seç / sürükle · <b>Orta</b> döndür · <b>Sağ</b> kaydır · <b>Tekerlek</b> yakınlaştır
+            <b>Sol</b> çiz / seç / sürükle · <b>Orta</b> döndür · <b>Ctrl+orta</b> kaydır · <b>Tekerlek</b> yakınlaştır · <kbd>Ctrl+8</kbd> normal'e bak
           </li>
           <li>
             Çizerken sayı yazın: ölçü kutusu (<kbd>Tab</kbd> ikinci değer, <kbd>Enter</kbd> onay)

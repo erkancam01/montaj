@@ -1,6 +1,6 @@
 // Viewport üstündeki komut katmanları: sağ üst onay köşesi, yüzey bağlam kutusu, sağ tık menüsü, S menüsü ve
 // sketch bitince Extrude önerisi.
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useAssembly } from '../../store/useAssembly';
 import { FIcon } from '../modeling/featureIcons';
 import { runFeatureTool } from '../Toolbar';
@@ -105,13 +105,26 @@ function ContextBox() {
       window.removeEventListener('keydown', onKey);
     };
   }, [box]);
+  // Kutu sahne alanından (canvas) taşmasın: yan panellerin altında kalmasın
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const cv = document.querySelector('canvas');
+    if (!el || !box || !cv) return;
+    const c = cv.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    let left = box.x + 14;
+    let top = box.y + 10;
+    if (left + r.width > c.right - 4) left = Math.max(c.left + 4, box.x - 14 - r.width);
+    if (top + r.height > c.bottom - 4) top = Math.max(c.top + 4, box.y - 10 - r.height);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }, [box]);
   if (!box?.hit) return null;
   const items = contextBoxItems(box.hit);
   return (
     <div
       ref={ref}
       className="ctx-box"
-      style={{ left: box.x + 14, top: box.y + 10 }}
       role="toolbar"
       aria-label="Bağlam araçları"
       onPointerDown={(e) => e.stopPropagation()}
