@@ -15,6 +15,8 @@ import type {
   Vec3,
 } from '../types';
 import { bodyFileId, isBodyFileId, bodyIdOfFile } from '../types';
+import { faceRefWithSig, localPlaneOf } from './externalRefs';
+import { ownPartIds, wouldCycle } from './refLocks';
 import { Quaternion, Vector3 } from 'three';
 
 const st = () => useAssembly.getState();
@@ -127,6 +129,63 @@ export function planeFromFace(bodyId: string, ref: import('../types').FaceRef): 
   return worldPlaneToBody(bodyId, world);
 }
 
+/**
+ * Yüze sketch başlatır. Yüz başka bir parçaya aitse düzlem o yüze canlı bağlanır (kaynak taşınınca
+ * sketch de gider); gövdenin kendi yüzüyse sabit koordinat olarak kopyalanır.
+ */
+export function startSketchOnFace(bodyId: string, ref: import('../types').FaceRef): boolean {
+  const s = st();
+  const plane = planeFromFace(bodyId, ref);
+  if (!plane) {
+    s.showToast('Seçilen yüzey düz değil; düz bir yüzey seçin.', 'error');
+    return false;
+  }
+  const own = ownPartIds(s.doc, bodyId).has(ref.partId);
+  if (own) {
+    startSketch(bodyId, plane);
+    return true;
+  }
+  if (wouldCycle(s.doc, bodyId, ref.partId)) {
+    s.showToast('Bu parça zaten bu parçaya bağlı; döngü oluşmaması için yüzey sabit kopya olarak alındı.');
+    startSketch(bodyId, plane);
+    return true;
+  }
+  const g = worldFaceGeom(ref, s.doc);
+  if (!g || g.kind !== 'plane') return false;
+  const world: PlaneDef = { origin: g.point, xDir: defaultXDir(g.normal), normal: norm(g.normal) };
+  const local = localPlaneOf(s.doc, ref.partId, world);
+  startSketch(bodyId, plane, local ? { ref: faceRefWithSig(s.doc, ref), local } : undefined);
+  return true;
+}
+
+/** Gövdenin tüm canlı dış referanslarını sabit kopyaya çevirir (kilit kalkar; geri alınabilir) */
+export function breakExternalRefs(bodyId: string) {
+  setFeatures(bodyId, (fs) =>
+    fs.map((f) => {
+      if (f.type !== 'sketch' || (!f.planeRef && !f.projections?.some((p) => !p.frozen))) return f;
+      const { planeRef: _drop, ...rest } = f;
+      void _drop;
+      return { ...rest, projections: f.projections?.map((p) => (p.frozen ? p : { ...p, frozen: true, broken: undefined })) };
+    }),
+  );
+  st().showToast('Bağlantılar koparıldı: referans geometri sabit kopya olarak kaldı.');
+}
+
+/** Boş (hiç özelliği olmayan) gövdeyi siler: yeni parça oluşturulup çizime başlanmadan vazgeçildiyse */
+export function discardIfEmpty(bodyId: string) {
+  const s = st();
+  const b = getBody(bodyId);
+  if (!b || b.features.length || s.modeling.sketch?.bodyId === bodyId) return;
+  const fid = bodyFileId(bodyId);
+  s.commit((d) => ({
+    ...d,
+    bodies: d.bodies.filter((x) => x.id !== bodyId),
+    instances: d.instances.filter((i) => i.fileId !== fid),
+    parts: d.parts.filter((p) => p.fileId !== fid),
+  }));
+  if (s.modeling.activeBodyId === bodyId) exitBody();
+}
+
 function nextName(base: string, existing: string[]): string {
   let n = 1;
   while (existing.includes(`${base} ${n}`)) n++;
@@ -198,7 +257,7 @@ function setFeatures(bodyId: string, fn: (f: Feature[]) => Feature[], mergeKey?:
 // ---------------------------------------------------------------- Sketch oturumu
 
 /** Yeni sketch başlatır (düzlem gövde-yerel) */
-export function startSketch(bodyId: string, plane: PlaneDef) {
+export function startSketch(bodyId: string, plane: PlaneDef, planeRef?: SketchFeature['planeRef']) {
   const body = getBody(bodyId);
   if (!body) return;
   const data: SketchFeature = {
@@ -209,6 +268,7 @@ export function startSketch(bodyId: string, plane: PlaneDef) {
     plane,
     entities: [],
     constraints: [],
+    ...(planeRef ? { planeRef } : {}),
   };
   const s = st();
   s.setModeling({ activeBodyId: bodyId, sketch: { bodyId, featureId: data.id, isNew: true, data }, feature: null, pick: null });

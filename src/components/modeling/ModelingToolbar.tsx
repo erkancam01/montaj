@@ -10,10 +10,11 @@ import {
   exitBody,
   FEATURE_LABELS,
   getBody,
+  discardIfEmpty,
   newFeatureDraft,
-  planeFromFace,
   startFeature,
   startSketch,
+  startSketchOnFace,
 } from '../../modeling/actions';
 import { exportAssemblyAsStep } from '../../modeling/exportStep';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
@@ -101,13 +102,29 @@ export function ModelingToolbar() {
     const t = picked[0];
     st.endPick();
     if (!bodyId || t.kind !== 'face') return;
-    const plane = planeFromFace(bodyId, t.ref);
-    if (!plane) {
-      st.showToast('Seçilen yüzey düz değil; düz bir yüzey seçin.', 'error');
+    startSketchOnFace(bodyId, t.ref);
+  }, [picked]);
+
+  // Yeni parça oluşturulup çizime başlanmadan vazgeçildiyse (menü kapandı, yüzey seçimi iptal) boş gövdeyi sil
+  const freshRef = useRef<string | null>(null);
+  useEffect(() => {
+    const fresh = freshRef.current;
+    if (!fresh) return;
+    const body = getBody(fresh);
+    if (!body || body.features.length) {
+      freshRef.current = null;
       return;
     }
-    startSketch(bodyId, plane);
-  }, [picked]);
+    if (menuOpen || sketchOpen || pickKey === SKETCH_PLANE_KEY) return;
+    freshRef.current = null;
+    discardIfEmpty(fresh);
+  }, [menuOpen, sketchOpen, pickKey]);
+
+  // Sahnede bu gövdeden başka parça var mı (varsa menüde önce "parçanın yüzeyine çiz" önerilir)
+  const hasOtherParts = useAssembly((s) => {
+    const own = s.modeling.activeBodyId;
+    return s.doc.parts.some((p) => p.visible && !(own && isBodyFileId(p.fileId) && bodyIdOfFile(p.fileId) === own));
+  });
 
   // Menü dışına tıklayınca kapat
   useEffect(() => {
@@ -132,7 +149,7 @@ export function ModelingToolbar() {
   }, [activeBodyId, sketchOpen]);
 
   const onNewBody = () => {
-    createBody();
+    freshRef.current = createBody();
     // Yeni parça: önce çizim düzlemi sorulur
     setMenuOpen(true);
   };
@@ -164,7 +181,7 @@ export function ModelingToolbar() {
       kinds: ['face'],
       filter: ['plane'],
       multi: false,
-      prompt: 'Çizim için düz bir yüzey seçin',
+      prompt: 'Çizim için düz bir yüzey seçin (başka parçanın yüzü seçilirse sketch ona bağlanır)',
     });
   };
 
@@ -223,15 +240,27 @@ export function ModelingToolbar() {
               {menuOpen && (
                 <div className="mdl-menu" role="menu">
                   <div className="mdl-menu-title">Çizim düzlemi</div>
+                  {hasOtherParts && (
+                    <>
+                      <button type="button" role="menuitem" className="mdl-menu-item mdl-menu-item-primary" onClick={pickSketchFace}>
+                        <span className="mdl-plane-chip">▱</span> Bir parçanın yüzeyine çiz…
+                      </button>
+                      <div className="mdl-menu-sep" />
+                    </>
+                  )}
                   {(['XY', 'XZ', 'YZ'] as const).map((k) => (
                     <button key={k} type="button" role="menuitem" className="mdl-menu-item" onClick={() => sketchOn(k)}>
                       <span className={`mdl-plane-chip plane-${k}`}>{k}</span> {k} düzlemi
                     </button>
                   ))}
-                  <div className="mdl-menu-sep" />
-                  <button type="button" role="menuitem" className="mdl-menu-item" onClick={pickSketchFace}>
-                    <span className="mdl-plane-chip">▱</span> Yüzey seç…
-                  </button>
+                  {!hasOtherParts && (
+                    <>
+                      <div className="mdl-menu-sep" />
+                      <button type="button" role="menuitem" className="mdl-menu-item" onClick={pickSketchFace}>
+                        <span className="mdl-plane-chip">▱</span> Yüzey seç…
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

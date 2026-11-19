@@ -2,7 +2,9 @@
 // Taslak store.modeling.sketch.data'dadır (updateSketchDraft ile yazılır); buradaki geçmiş yalnız oturum içindir.
 import { create } from 'zustand';
 import { updateSketchDraft } from '../modeling/actions';
-import type { SkConstraint, SkConstraintType, SkEntity, SketchFeature, Vec2 } from '../modeling/types';
+import type { ExtRef, SkConstraint, SkConstraintType, SkEntity, SketchFeature, SkProjection, Vec2 } from '../modeling/types';
+import { buildProjectionEntities, faceRefWithSig, projectSource } from '../modeling/externalRefs';
+import { ownPartIds, wouldCycle } from '../modeling/refLocks';
 import { useAssembly } from '../store/useAssembly';
 import {
   applicableConstraints,
@@ -28,7 +30,7 @@ import {
 
 // ---------------------------------------------------------------- Arayüz durumu
 
-export type SketchTool = 'select' | 'line' | 'rect' | 'rectCenter' | 'circle' | 'arc' | 'point' | 'dimension';
+export type SketchTool = 'select' | 'line' | 'rect' | 'rectCenter' | 'circle' | 'arc' | 'point' | 'dimension' | 'project';
 
 export interface SolveStatus {
   /** Çözücü bu taslağı çözdü mü (hazır değilse false) */
@@ -561,8 +563,61 @@ export function toggleConstruction(ids: string[]): boolean {
 export function deleteSelection() {
   const sel = ui().sel;
   if (!sel.length) return;
-  applySketch((d) => removeItems(d, sel), { allowFail: true });
+  applySketch((d) => removeWithProjections(d, sel), { allowFail: true });
   setUi({ sel: [], hover: null });
+}
+
+/** Silme: projeksiyon geometrisinden biri seçiliyse o projeksiyonun tamamı (ve kaydı) silinir */
+export function removeWithProjections(d: SketchFeature, ids: string[]): SketchFeature {
+  const projIds = new Set<string>();
+  for (const id of ids) {
+    const e = d.entities.find((x) => x.id === id);
+    if (e?.ext) projIds.add(e.ext);
+  }
+  if (!projIds.size) return removeItems(d, ids);
+  const all = new Set(ids);
+  for (const e of d.entities) if (e.ext && projIds.has(e.ext)) all.add(e.id);
+  const out = removeItems(d, all);
+  return { ...out, projections: (d.projections ?? []).filter((p) => !projIds.has(p.id)) };
+}
+
+// ---------------------------------------------------------------- Projeksiyon (dış referans)
+
+/**
+ * Başka bir parçanın yüzünü/kenarını sketch'e aktarır. Kaynak başka bir parçaysa canlı bağlanır;
+ * gövdenin kendi geometrisiyse (ya da döngü oluşacaksa) sabit kopya olur.
+ */
+export function addProjection(source: ExtRef): boolean {
+  const s = useAssembly.getState();
+  const sk = s.modeling.sketch;
+  const cur = currentSketch();
+  if (!sk || !cur) return false;
+  const pid = source.face?.partId ?? source.edge?.partId;
+  if (!pid) return false;
+  const src: ExtRef = source.face ? { face: faceRefWithSig(s.doc, source.face) } : source;
+  const dup = (cur.projections ?? []).some((p) => JSON.stringify(p.source) === JSON.stringify(src));
+  if (dup) {
+    s.showToast('Bu yüzey/kenar zaten aktarıldı.');
+    return false;
+  }
+  const own = ownPartIds(s.doc, sk.bodyId).has(pid);
+  const frozen = own || wouldCycle(s.doc, sk.bodyId, pid);
+  const r = projectSource(s.doc, sk.bodyId, cur.plane, src);
+  if (typeof r === 'string') {
+    s.showToast(`Aktarılamadı: ${r}.`, 'error');
+    return false;
+  }
+  const projId = newId('j', cur);
+  const ents = buildProjectionEntities(projId, r.curves);
+  const proj: SkProjection = { id: projId, source: r.source, entityIds: ents.map((e) => e.id), ...(frozen ? { frozen: true } : {}) };
+  const ok = applySketch((d) => ({ ...d, entities: [...d.entities, ...ents], projections: [...(d.projections ?? []), proj] }), {
+    failMessage: 'Aktarılan geometri mevcut kısıtlarla çözülemedi.',
+  });
+  if (ok) {
+    const n = ents.filter((e) => e.kind !== 'point').length;
+    s.showToast(`${n} eğri aktarıldı${frozen ? ' (sabit kopya)' : ' — kaynağa bağlı'}.`);
+  }
+  return ok;
 }
 
 // ---------------------------------------------------------------- Seçim

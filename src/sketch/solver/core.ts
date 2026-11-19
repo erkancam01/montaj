@@ -176,8 +176,10 @@ function solveOnce(entities: SkEntity[], constraints: SkConstraint[], drag: Solv
     for (const e of entities) {
       if (e.kind !== 'point') continue;
       if (!Number.isFinite(e.x) || !Number.isFinite(e.y)) return fail();
-      const i = pushParam(e.x, false);
-      pushParam(e.y, false);
+      // Projeksiyonla gelen (dış referans) noktalar sabittir
+      const fx = !!e.ext;
+      const i = pushParam(e.x, fx);
+      pushParam(e.y, fx);
       pointParam.set(e.id, i);
     }
     const P = (id: string): Deletable => {
@@ -196,16 +198,17 @@ function solveOnce(entities: SkEntity[], constraints: SkConstraint[], drag: Solv
     for (const e of entities) {
       if (e.kind === 'point' || !idx.curveOk(e)) continue;
       if (e.kind === 'circle') {
-        curveParam.set(e.id, pushParam(Math.abs(e.r) || 1e-6, false));
+        curveParam.set(e.id, pushParam(Math.abs(e.r) || 1e-6, !!e.ext));
       } else if (e.kind === 'arc') {
         const c = idx.point(e.c)!, s = idx.point(e.start)!, en = idx.point(e.end)!;
         const sa = Math.atan2(s.y - c.y, s.x - c.x);
         let ea = Math.atan2(en.y - c.y, en.x - c.x);
         while (ea <= sa) ea += 2 * Math.PI; // ccw start→end
         const r = Math.abs(e.r) || Math.hypot(s.x - c.x, s.y - c.y) || 1e-6;
-        const i = pushParam(sa, false);
-        pushParam(ea, false);
-        pushParam(r, false);
+        const fx = !!e.ext;
+        const i = pushParam(sa, fx);
+        pushParam(ea, fx);
+        pushParam(r, fx);
         curveParam.set(e.id, i);
       }
     }
@@ -231,7 +234,7 @@ function solveOnce(entities: SkEntity[], constraints: SkConstraint[], drag: Solv
 
     // Yay iç kuralları: uç noktaları merkez + r·(cos, sin)(açı) üzerinde tutar
     for (const e of entities) {
-      if (e.kind === 'arc' && curveParam.has(e.id)) g.add_constraint_arc_rules(C(e) as never, INTERNAL_TAG, true, 1);
+      if (e.kind === 'arc' && !e.ext && curveParam.has(e.id)) g.add_constraint_arc_rules(C(e) as never, INTERNAL_TAG, true, 1);
     }
 
     // --- çakışıklık birleşimi (uç noktası paylaşan teğetlik tespiti için)

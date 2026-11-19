@@ -7,6 +7,7 @@ import { useAssembly } from '../../store/useAssembly';
 import {
   addConstraint,
   addItems,
+  addProjection,
   applySketch,
   beginGesture,
   currentSketch,
@@ -44,6 +45,7 @@ import {
   intersectLines,
 } from './geom';
 import { clientToOverlay, clientToSketch, pxSize, sketchToOverlay } from './view';
+import { pickProjectionSource } from './projectPick';
 
 // ---------------------------------------------------------------- Çizim durumu (görsel)
 
@@ -392,7 +394,7 @@ function refreshPreview() {
   const raw = ctl.lastRaw;
   if (!d || !raw) return;
   const tool = ui().tool;
-  if (tool === 'select') return;
+  if (tool === 'select' || tool === 'project') return;
   if (tool === 'dimension') {
     const hit = hitTest(raw, d);
     setHover(hit?.id ?? null);
@@ -686,6 +688,8 @@ function selectDown(e: PointerEvent, raw: Vec2) {
     selNow = [hit.id];
     setSelection(selNow);
   }
+  // Projeksiyon geometrisi kaynağa bağlıdır: sürüklenmez
+  if (d.entities.find((x) => x.id === hit.id)?.ext) return;
   // Sürükleme adayı
   const pm = pointMap(d.entities);
   const orig = new Map<string, Vec2>();
@@ -835,6 +839,12 @@ export function onPointerDown(e: PointerEvent) {
     dimClick(raw);
     return;
   }
+  if (tool === 'project') {
+    const src = pickProjectionSource(e.clientX, e.clientY);
+    if (src) addProjection(src);
+    else toast('Burada bir parça yüzü ya da kenarı yok.');
+    return;
+  }
   refreshPreview();
   commitStep();
 }
@@ -861,6 +871,10 @@ export function onPointerMove(e: PointerEvent) {
     const d = currentSketch();
     if (d) setHover(hitTest(raw, d)?.id ?? null);
     if (useDraw.getState().cursor) setDraw({ cursor: null, hint: null });
+    return;
+  }
+  if (tool === 'project') {
+    setDraw({ cursor, hint: 'Aktarmak için bir yüze ya da kenara tıklayın', preview: null, marker: null });
     return;
   }
   setDraw({ cursor });
@@ -919,6 +933,7 @@ const TOOL_KEYS: Record<string, SketchTool> = {
   a: 'arc',
   p: 'point',
   d: 'dimension',
+  j: 'project',
 };
 
 /** Esc davranışı: çizim → araç → seçim */

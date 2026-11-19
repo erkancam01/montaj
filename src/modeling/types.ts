@@ -26,6 +26,8 @@ export interface SkPoint {
   y: number;
   /** Bir eğrinin uç/merkez noktası değil, bağımsız (yardımcı) nokta */
   standalone?: boolean;
+  /** Projeksiyonla gelen (dış referans) geometri: SkProjection id. Çözücüde sabittir. */
+  ext?: string;
 }
 export interface SkLine {
   id: string;
@@ -33,6 +35,8 @@ export interface SkLine {
   p1: string;
   p2: string;
   construction?: boolean;
+  /** Projeksiyonla gelen (dış referans) geometri: SkProjection id */
+  ext?: string;
 }
 export interface SkCircle {
   id: string;
@@ -41,6 +45,8 @@ export interface SkCircle {
   c: string;
   r: number;
   construction?: boolean;
+  /** Projeksiyonla gelen (dış referans) geometri: SkProjection id */
+  ext?: string;
 }
 /** Merkez c etrafında start'tan end'e SAAT YÖNÜ TERSİNE (ccw) yay. start/end/c nokta id'leri. */
 export interface SkArc {
@@ -51,6 +57,8 @@ export interface SkArc {
   end: string;
   r: number;
   construction?: boolean;
+  /** Projeksiyonla gelen (dış referans) geometri: SkProjection id */
+  ext?: string;
 }
 export type SkEntity = SkPoint | SkLine | SkCircle | SkArc;
 export type SkCurve = SkLine | SkCircle | SkArc;
@@ -94,12 +102,39 @@ interface FeatureBase {
   suppressed: boolean;
 }
 
+/**
+ * Başka bir parçaya (STEP ya da başka gövde) canlı referans. face: kaynak yüz (gövde kaynaklarında sig ile
+ * yeniden eşlenir). edge: gövde kaynağında tek B-rep kenarı (imzasıyla eşlenir).
+ */
+export interface ExtRef {
+  face?: FaceRef;
+  edge?: { partId: string; sig: EdgeSig };
+}
+
+/** Sketch'e projeksiyonla aktarılan dış geometri. entityIds: üretilen eğri ve noktalar (sıralı). */
+export interface SkProjection {
+  id: string;
+  source: ExtRef;
+  entityIds: string[];
+  /** Son yeniden hesaplamada kaynak bulunamadı ya da şekil uyuşmadı; son değerler korunuyor */
+  broken?: boolean;
+  /** Sabit kopya: kaynak izlenmez (gövdenin kendi yüzü ya da "Bağlantıyı kopar" sonrası) */
+  frozen?: boolean;
+}
+
 /** Sketch orijini (0,0) = plane.origin; sketch x ekseni = plane.xDir */
 export interface SketchFeature extends FeatureBase {
   type: 'sketch';
   plane: PlaneDef;
   entities: SkEntity[];
   constraints: SkConstraint[];
+  /**
+   * Düzlem başka bir parçanın yüzüne bağlı: local = kaynak parçanın yerel çerçevesindeki düzlem.
+   * Her yeniden üretimde plane = gövde⁻¹ ∘ kaynakDünya ∘ local olarak yenilenir.
+   */
+  planeRef?: { ref: FaceRef; local: PlaneDef; broken?: boolean };
+  /** Başka parçalardan projeksiyonlar (canlı) */
+  projections?: SkProjection[];
 }
 
 /** add: gövdeye ekle (gövde boşsa ilk katıyı oluşturur) · cut: gövdeden çıkar */

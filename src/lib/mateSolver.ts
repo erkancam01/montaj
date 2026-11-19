@@ -4,6 +4,7 @@ import { Quaternion, Vector3 } from 'three';
 import type { Doc, FaceGeom, Group, Instance, Mate, MateStatus, Part, Transform, Vec3 } from '../types';
 import { getFaceGeom, worldFaceGeom } from './faceGeometry';
 import { partLocalFromWorld } from './math';
+import { lockedPartIds } from '../modeling/refLocks';
 
 export interface SolveResult {
   /** Değişiklik yoksa `next` ile AYNI nesne döner */
@@ -27,6 +28,7 @@ const EPS_CHANGE = 1e-9;
 const MSG_CYCLE = "Döngü: bu mate başka mate'lerle çevrim oluşturuyor";
 const MSG_CONFLICT = "Çelişkili: diğer mate'lerle birlikte sağlanamıyor";
 const MSG_SELF = 'Aynı parçanın iki yüzeyi arasında mate kurulamaz';
+const MSG_LOCKED = 'Hareketli parça başka bir parçaya bağlı (canlı referans); mate yönünü değiştirin ya da bağlantıyı koparın';
 const MSG_KIND = 'Bu yüzeyler bu mate tipi için uygun değil';
 const MSG_SAME_BODY = 'Aynı rijit gruptaki parçalar arasında mate kurulamaz';
 
@@ -278,6 +280,8 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
   const parts = byId(next.parts);
   const insts = byId(next.instances);
   const groups = next.groups ?? [];
+  /** Canlı dış referanslı gövde parçaları mate'te hareketli taraf olamaz */
+  const locked = lockedPartIds(next);
 
   /** parça id → grubu (bir parça en fazla bir grupta; tutarsızlıkta ilk grup geçerli) */
   let groupOf: Map<string, Group> | null = null;
@@ -376,6 +380,10 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
     }
     if (!geomCompatible(m.type, ga, gb)) {
       status[m.id] = { state: 'error', message: MSG_KIND };
+      continue;
+    }
+    if (locked.has(pb.id)) {
+      status[m.id] = { state: 'error', message: MSG_LOCKED };
       continue;
     }
     const out = edges.get(aId);

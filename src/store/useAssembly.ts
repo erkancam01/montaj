@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { solveMates } from '../lib/mateSolver';
 import { cleanupGroups } from '../lib/rigid';
+import { lockedPartIds } from '../modeling/refLocks';
 import type {
   BodyBuildStatus,
   Doc,
@@ -159,8 +160,48 @@ const validMate = (id: string | null, doc: Doc) => (id && doc.mates.some((m) => 
 /** Silinen parçaya ait yüzey seçimini temizler */
 const validFace = (f: FaceRef | null, doc: Doc) => (f && doc.parts.some((p) => p.id === f.partId) ? f : null);
 
+const sameT = (a: { position: number[]; quaternion: number[] }, b: { position: number[]; quaternion: number[] }) =>
+  a.position.every((v, i) => v === b.position[i]) && a.quaternion.every((v, i) => v === b.quaternion[i]);
+
+let lockToastAt = 0;
+
+/**
+ * Canlı dış referanslı gövdeler konumlarını referanslarından alır: doğrudan taşınırlarsa (gizmo, sayısal
+ * giriş, grup) önceki dönüşüm geri yüklenir.
+ */
+function enforceLocks(prev: Doc, next: Doc): Doc {
+  if (!next.bodies?.length) return next;
+  const locked = lockedPartIds(next);
+  if (!locked.size) return next;
+  let parts = next.parts;
+  let instances = next.instances;
+  for (const pid of locked) {
+    const pn = next.parts.find((p) => p.id === pid);
+    const pp = prev.parts.find((p) => p.id === pid);
+    if (!pn || !pp) continue;
+    const inn = next.instances.find((i) => i.id === pn.instanceId);
+    const ip = prev.instances.find((i) => i.id === pp.instanceId);
+    if (!inn || !ip || inn.id !== ip.id) continue;
+    if (sameT(pn, pp) && sameT(inn, ip)) continue;
+    parts = parts.map((p) => (p.id === pid ? { ...p, position: pp.position, quaternion: pp.quaternion } : p));
+    instances = instances.map((i) => (i.id === inn.id ? { ...i, position: ip.position, quaternion: ip.quaternion } : i));
+  }
+  if (parts === next.parts && instances === next.instances) return next;
+  const now = Date.now();
+  if (now - lockToastAt > 3000) {
+    lockToastAt = now;
+    queueMicrotask(() =>
+      useAssembly
+        .getState()
+        .showToast('Bu parça başka bir parçaya bağlı; konumunu ondan alır. Taşımak için özellik ağacında "Bağlantıyı kopar".'),
+    );
+  }
+  return { ...next, parts, instances };
+}
+
 /** Mate'leri çözer; mate yoksa belgeyi olduğu gibi döndürür */
-function solve(prev: Doc, next: Doc): { doc: Doc; mateStatus: Record<string, MateStatus> } {
+function solve(prev: Doc, nextIn: Doc): { doc: Doc; mateStatus: Record<string, MateStatus> } {
+  const next = enforceLocks(prev, nextIn);
   if (!next.mates.length) return { doc: next, mateStatus: {} };
   try {
     const r = solveMates(prev, next);

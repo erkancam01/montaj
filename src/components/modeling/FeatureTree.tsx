@@ -2,6 +2,7 @@
 import { memo, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
+  breakExternalRefs,
   deleteFeature,
   dependentsOf,
   editFeature,
@@ -14,6 +15,7 @@ import {
   setFeatureSuppressed,
 } from '../../modeling/actions';
 import { useAssembly } from '../../store/useAssembly';
+import { liveSourcesOf } from '../../modeling/refLocks';
 import type { Feature } from '../../types';
 import { IconEye, IconEyeOff } from '../icons';
 import { NameField } from '../Inspector';
@@ -39,6 +41,19 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
         sketchId: sk && sk.bodyId === bodyId ? sk.featureId : null,
         sketchNew: sk && sk.bodyId === bodyId && sk.isNew ? sk.data : null,
       };
+    }),
+  );
+  const linked = useAssembly(
+    useShallow((s) => {
+      const b = s.doc.bodies.find((x) => x.id === bodyId);
+      if (!b) return null;
+      const ids = liveSourcesOf(s.doc, b);
+      if (!ids.length) return null;
+      const names = ids.map((id) => s.doc.parts.find((p) => p.id === id)?.name ?? '?').join(', ');
+      const broken = b.features.some(
+        (f) => f.type === 'sketch' && (f.planeRef?.broken || f.projections?.some((p) => !p.frozen && p.broken)),
+      );
+      return { names, broken };
     }),
   );
   const [selected, setSelected] = useState<string | null>(null);
@@ -152,6 +167,23 @@ function FeatureTreePanel({ bodyId }: { bodyId: string }) {
           </div>
         )}
       </div>
+      {linked && (
+        <div className="ft-link" title={`Bağlı olduğu parçalar: ${linked.names}`}>
+          <span className="ft-link-icon" aria-hidden="true">🔗</span>
+          <span className="ft-link-text">
+            {linked.names} parçasına bağlı{linked.broken ? ' · bazı referanslar bulunamadı' : ''}
+          </span>
+          <button
+            type="button"
+            className="btn btn-small"
+            disabled={!!sketchId}
+            title="Referansları sabit kopyaya çevir: parça kaynağı izlemez ve serbestçe taşınabilir"
+            onClick={() => breakExternalRefs(bodyId)}
+          >
+            Bağlantıyı kopar
+          </button>
+        </div>
+      )}
       <div className="ft-foot">
         <span className="ft-count">
           {features.length} özellik{nErr ? ` · ${nErr} hata` : ''}
@@ -214,8 +246,12 @@ interface RowProps {
 
 function describe(f: Feature): string {
   switch (f.type) {
-    case 'sketch':
-      return `${f.entities.filter((e) => e.kind !== 'point').length} eğri`;
+    case 'sketch': {
+      const n = `${f.entities.filter((e) => e.kind !== 'point').length} eğri`;
+      const live = !!f.planeRef || !!f.projections?.some((p) => !p.frozen);
+      const broken = !!f.planeRef?.broken || !!f.projections?.some((p) => !p.frozen && p.broken);
+      return live ? `${n} · 🔗${broken ? ' ⚠' : ''}` : n;
+    }
     case 'extrude':
       return `${f.operation === 'cut' ? 'Kes' : 'Ekle'} · ${f.throughAll ? 'tümünden' : `${Number(f.distance.toFixed(2))} mm`}`;
     case 'revolve':

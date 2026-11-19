@@ -32,7 +32,7 @@ ilk girildiğinde arka planda yüklenir.
 ## Parametrik modelleme
 
 1. **Yeni parça** → çizim düzlemi seçin (XY / XZ / YZ ya da **Yüzey seç…** ile herhangi bir düz yüzey).
-2. **Sketch**: Çizgi (L), Dikdörtgen (R), Daire (C), Yay (A), Nokta (P), Ölçü (D), Yardımcı (X).
+2. **Sketch**: Çizgi (L), Dikdörtgen (R), Daire (C), Yay (A), Nokta (P), Ölçü (D), Projeksiyon (J), Yardımcı (X).
    - Çizerken sayı yazarak uzunluk/yarıçap girilebilir (Tab: ikinci değer, Enter: onay).
    - İlişkiler: seçime göre araç çubuğunda çıkar (yatay, dikey, çakışık, paralel, dik, eşit, teğet, sabit…).
    - Ölçü etiketine çift tıklayarak değeri değiştirin. "Tam tanımlı" olunca geometri beyaz görünür.
@@ -43,6 +43,20 @@ ilk girildiğinde arka planda yüklenir.
    parça ve ona bağlı mate'ler yeniden oluşur. Özellikler bastırılabilir, sıralanabilir, silinebilir.
 5. **Düzenlemeyi bitir** ile montaja dönün; çizilen parça normal parça gibi mate/grup/gizmo ile kullanılır.
    Çizilen bir parçayı yeniden düzenlemek için seçip **Parçayı düzenle** (ya da çift tık).
+
+## Başka parçaları referans alma
+
+- **Parçanın yüzeyine çiz**: **Yeni parça** menüsünde (sahnede parça varsa ilk seçenek) "Bir parçanın yüzeyine çiz…"
+  ile STEP parçasının ya da başka bir çizilmiş parçanın düz yüzünü seçin. Sketch o yüze **bağlanır**: kaynak
+  taşınır ya da (çizilmiş parçaysa) yeniden üretilirse düzlem de onunla gider.
+- **Projeksiyon (J)**: sketch'teyken aracı seçip başka bir parçanın düz yüzüne tıklayın; dış hat ve delikler
+  çizgi/yay/daire olarak (mor) gelir. Silindir yüze (delik duvarı) tıklamak daireyi, çizilmiş parçalarda bir
+  kenara tıklamak o kenarı aktarır. Yalnız sketch düzlemine paralel yüz/kenarlar aktarılır.
+  Aktarılan geometri sabittir (sürüklenmez); kendi çizgilerinizi ona ilişki/ölçüyle bağlayın, kaynak
+  değişince onlar da gelir. Seçip Del ile tüm projeksiyon silinir; X ile yardımcı geometri yapılır.
+- **Bağlı parça kilitlidir**: konumunu referansından alır, gizmo/mate ile taşınamaz. Özellik ağacının altındaki
+  **Bağlantıyı kopar** referansları sabit kopyaya çevirir ve kilidi kaldırır.
+- Parçanın kendi yüzünden alınan referanslar ve döngü oluşturacak referanslar sabit kopya olarak alınır.
 
 ## Dışa aktarma
 
@@ -68,8 +82,11 @@ ilk girildiğinde arka planda yüklenir.
 
 ## Bilinen sınırlamalar
 
-- Sketch düzlemi, oluşturulduğu anda sabit koordinat olarak kaydedilir (yüze bağlı değildir): alttaki
-  özellik değişip yüz yer değiştirirse sketch eski konumunda kalır.
+- Parçanın kendi yüzüne açılan sketch düzlemi sabit koordinat olarak kaydedilir: alttaki özellik değişip yüz
+  yer değiştirirse sketch eski konumunda kalır. (Başka parçaların yüzlerine açılan sketch'ler bağlıdır.)
+- Projeksiyonun şekli kaynakta değişirse (ör. kaynak parçaya yeni delik eklendi) eşleşme bozulur; son hâli
+  korunur ve özellik ağacında ⚠ gösterilir. Projeksiyonu silip yeniden aktarın.
+- Bağlı parça kaynak sürüklenirken değil, bırakıldığında güncellenir.
 - Radyus/pah kenarları ve çizilen parçalardaki mate yüzleri geometrik imzayla yeniden eşlenir; çok büyük
   topoloji değişikliklerinde yanlış kenar/yüz seçilebilir (özellik ağacında uyarı gösterilir).
 - Sketch'te kesişen eğriler otomatik bölünmez (trim yok); 3 noktalı yay, teğet yay, spline yok.

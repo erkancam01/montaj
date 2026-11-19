@@ -86,6 +86,15 @@ export function ToolIcon({ tool, size }: { tool: SketchTool; size?: number }) {
           <path d="M4.8 6.4 L2.8 8 L4.8 9.6 M11.2 6.4 L13.2 8 L11.2 9.6" strokeWidth={1.1} />
         </Svg>
       );
+    case 'project':
+      return (
+        <Svg size={size}>
+          <path d="M3 3.5 L11 3.5 L13 6 L5 6 Z" strokeWidth={1.1} />
+          <path d="M8 7 V10.5" strokeDasharray="1.4 1.4" strokeWidth={1} />
+          <path d="M6.6 9.4 L8 10.8 L9.4 9.4" strokeWidth={1} />
+          <rect x="3" y="11.5" width="10" height="2.5" />
+        </Svg>
+      );
   }
 }
 

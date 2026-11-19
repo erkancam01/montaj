@@ -28,6 +28,12 @@ const TOOLS: { tool: SketchTool; label: string; key: string; title: string }[] =
   { tool: 'arc', label: 'Yay', key: 'A', title: 'Merkez → başlangıç → bitiş (fare hareketi yönü belirler)' },
   { tool: 'point', label: 'Nokta', key: 'P', title: 'Bağımsız nokta' },
   { tool: 'dimension', label: 'Ölçü', key: 'D', title: 'Ölçü: öğe(ler)i seçin, etiketi yerleştirmek için boşluğa tıklayın' },
+  {
+    tool: 'project',
+    label: 'Projeksiyon',
+    key: 'J',
+    title: "Başka bir parçanın yüzünü (dış hat + delikler) ya da kenarını sketch'e aktar; kaynak taşınınca güncellenir",
+  },
 ];
 
 export function SketchToolbar() {

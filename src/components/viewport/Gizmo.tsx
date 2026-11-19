@@ -8,6 +8,7 @@ import { applyWorldDelta, rigidSetOf, selectedPartIds } from '../../lib/rigid';
 import { useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { Doc, Transform } from '../../types';
 import { markGizmoDown, markGizmoUp, sceneRefs } from './sceneRefs';
+import { lockedPartIds } from '../../modeling/refLocks';
 
 /** Parça ve instance'ı görünür mü */
 function partShown(doc: Doc, partId: string): boolean {
@@ -52,7 +53,13 @@ export function Gizmo() {
   const doc = useAssembly((s) => s.doc);
   const visible = useAssembly(selectionVisible);
   // Mate aracında ve mate seçiliyken gizmo gösterilmez
-  const hidden = useAssembly((s) => s.ui.tool === 'mate' || s.mateSelection !== null);
+  // Canlı referanslı (kilitli) gövde parçası seçiliyse de gösterilmez: konumunu referansından alır
+  const hidden = useAssembly(
+    (s) =>
+      s.ui.tool === 'mate' ||
+      s.mateSelection !== null ||
+      (!!s.selection && !!s.doc.bodies.length && selectedPartIds(s.doc, s.selection, s.extraSel).some((id) => lockedPartIds(s.doc).has(id))),
+  );
   const ui = useAssembly(
     useShallow((s) => ({
       mode: s.ui.mode,

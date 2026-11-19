@@ -46,6 +46,8 @@ export const SK_COLORS = {
   axisY: '#57ab5a',
   grid: '#8f9aa8',
   region: '#2f6fed',
+  /** Projeksiyonla gelen (dış referans) geometri */
+  ext: '#c77dff',
 };
 
 const rgb = (hex: string): [number, number, number] => {
@@ -477,10 +479,11 @@ function useHighlight(data: SketchFeature) {
   }, [data.constraints, sel, hover, status, pending]);
 }
 
-function entityColor(id: string, h: ReturnType<typeof useHighlight>): string {
+function entityColor(id: string, h: ReturnType<typeof useHighlight>, ext?: boolean): string {
   if (h.selSet.has(id)) return SK_COLORS.sel;
   if (h.hoverSet.has(id)) return SK_COLORS.hover;
   if (h.conflictSet.has(id)) return SK_COLORS.conflict;
+  if (ext) return SK_COLORS.ext;
   return h.defined ? SK_COLORS.defined : SK_COLORS.free;
 }
 
@@ -504,7 +507,7 @@ function Entities({ data }: { data: SketchFeature }) {
     const ppos: number[] = [];
     const pcol: number[] = [];
     for (const e of data.entities) {
-      const col = rgb(entityColor(e.id, h));
+      const col = rgb(entityColor(e.id, h, !!e.ext));
       if (e.kind === 'point') {
         ppos.push(e.x, e.y, 0);
         pcol.push(...col);
