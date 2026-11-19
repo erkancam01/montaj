@@ -441,10 +441,20 @@ export function primBounds(prims: DxfPrim[]): { min: Vec2; max: Vec2 } | null {
 
 const arcPt = (p: { c: Vec2; r: number }, a: number): Vec2 => [p.c[0] + p.r * Math.cos(a), p.c[1] + p.r * Math.sin(a)];
 
-/** Katman süzme + birim + ayna + dönüş + yerleşim (sonuç sketch koordinatında, mm) */
-export function placeDxf(data: DxfData, o: DxfPlacement): DxfPrim[] {
-  const keep = new Set(o.layers);
-  const src = data.prims.filter((p) => keep.has(p.layer));
+/** Tek eğriyi benzerlik dönüşümüyle taşır (sonuç 1:1; yay yay kalır) */
+function mapPrim(m: Mat, p: DxfPrim): DxfPrim {
+  const ctx: Ctx = { out: [], skipped: {}, blocks: new Map() };
+  if (p.kind === 'line') addLine(ctx, m, p.a, p.b, p.layer);
+  else if (p.kind === 'circle') addArc(ctx, m, p.c, p.r, 0, TAU, p.layer, true);
+  else addArc(ctx, m, p.c, p.r, p.a0, p.a1, p.layer);
+  return ctx.out[0] ?? p;
+}
+
+/**
+ * Birim + ayna + dönüş + yerleşim (sonuç sketch koordinatında, mm). Çıktı girdiyle aynı sıra ve uzunlukta.
+ * anchorMask verilirse yerleşim (orijine gelen nokta) yalnız işaretli eğrilerden hesaplanır.
+ */
+export function transformPrims(prims: DxfPrim[], o: Omit<DxfPlacement, 'layers'>, anchorMask?: boolean[]): DxfPrim[] {
   const rad = (o.rotate * Math.PI) / 180;
   const c = Math.cos(rad);
   const s = Math.sin(rad);
@@ -452,25 +462,130 @@ export function placeDxf(data: DxfData, o: DxfPlacement): DxfPrim[] {
   const mx = o.mirror ? -1 : 1;
   // Önce ölçek + ayna + dönüş (orijin etrafında), sonra yerleşim kaydırması
   const lin: Mat = [c * k * mx, -s * k, 0, s * k * mx, c * k, 0];
-  const ctx: Ctx = { out: [], skipped: {}, blocks: new Map() };
-  for (const p of src) {
-    if (p.kind === 'line') addLine(ctx, lin, p.a, p.b, p.layer);
-    else if (p.kind === 'circle') addArc(ctx, lin, p.c, p.r, 0, TAU, p.layer, true);
-    else addArc(ctx, lin, p.c, p.r, p.a0, p.a1, p.layer);
-  }
-  const bb = primBounds(ctx.out);
+  const mid = prims.map((p) => mapPrim(lin, p));
+  // Hiçbiri seçili değilse tüm çizime göre (önizleme kaymasın)
+  const bb = primBounds(anchorMask?.some(Boolean) ? mid.filter((_, i) => anchorMask[i]) : mid);
   let shift: Vec2 = [0, 0];
   if (bb && o.anchor === 'center') shift = [-(bb.min[0] + bb.max[0]) / 2, -(bb.min[1] + bb.max[1]) / 2];
   else if (bb && o.anchor === 'minCorner') shift = [-bb.min[0], -bb.min[1]];
   const t: Mat = [1, 0, shift[0] + o.offset[0], 0, 1, shift[1] + o.offset[1]];
-  const out: Ctx = { out: [], skipped: {}, blocks: new Map() };
-  for (const p of ctx.out) {
-    if (p.kind === 'line') addLine(out, t, p.a, p.b, p.layer);
-    else if (p.kind === 'circle') out.out.push({ ...p, c: apply(t, p.c) });
-    else out.out.push({ ...p, c: apply(t, p.c) });
-  }
-  return out.out;
+  return mid.map((p) => mapPrim(t, p));
 }
+
+/** Katman süzme + birim + ayna + dönüş + yerleşim (sonuç sketch koordinatında, mm) */
+export function placeDxf(data: DxfData, o: DxfPlacement): DxfPrim[] {
+  const keep = new Set(o.layers);
+  return transformPrims(data.prims.filter((p) => keep.has(p.layer)), o);
+}
+
+/**
+ * Ayrı profiller: uçları birleşen eğriler aynı parçadır; kutusu başka bir parçanın kutusu içinde kalan
+ * parça (ör. profil içindeki vida dairesi, ayrı çizilmiş odacık) onu içeren profile katılır. Dönen dizi eğri başına grup no
+ * (0'dan, soldan sağa / yukarıdan aşağı sıralı).
+ */
+export function dxfPieces(prims: DxfPrim[], tol = 0.01): number[] {
+  const n = prims.length;
+  const parent = prims.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[ra] = rb;
+  };
+  // 1) Ortak uç noktası (ızgara karması)
+  const cell = Math.max(tol, 1e-9);
+  const grid = new Map<string, number[]>();
+  const ends = (p: DxfPrim): Vec2[] =>
+    p.kind === 'line' ? [p.a, p.b] : p.kind === 'arc' ? [arcPt(p, p.a0), arcPt(p, p.a1)] : [];
+  prims.forEach((p, i) => {
+    for (const q of ends(p)) {
+      const gx = Math.floor(q[0] / cell);
+      const gy = Math.floor(q[1] / cell);
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++) for (const j of grid.get(`${gx + dx},${gy + dy}`) ?? []) union(i, j);
+      const key = `${gx},${gy}`;
+      const l = grid.get(key);
+      if (l) l.push(i);
+      else grid.set(key, [i]);
+    }
+  });
+  // 2) İçerme: kutusu başka bir grubun kutusunun tamamen içinde kalan grup (ayrı çizilmiş iç odacık, vida
+  // dairesi, küçük detay) onu içeren en küçük gruba katılır. Kısmen kesişen gruplar (yan yana duran,
+  // birbirine geçen profiller) ayrı kalır.
+  const boxOf = new Map<number, { min: Vec2; max: Vec2 }>();
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    const bx = primBounds([prims[i]])!;
+    const cur = boxOf.get(r);
+    if (!cur) boxOf.set(r, { min: [...bx.min], max: [...bx.max] });
+    else {
+      cur.min = [Math.min(cur.min[0], bx.min[0]), Math.min(cur.min[1], bx.min[1])];
+      cur.max = [Math.max(cur.max[0], bx.max[0]), Math.max(cur.max[1], bx.max[1])];
+    }
+  }
+  const area = (q: { min: Vec2; max: Vec2 }) => (q.max[0] - q.min[0]) * (q.max[1] - q.min[1]);
+  const inside = (q: { min: Vec2; max: Vec2 }, o: { min: Vec2; max: Vec2 }) =>
+    q.min[0] >= o.min[0] - tol && q.min[1] >= o.min[1] - tol && q.max[0] <= o.max[0] + tol && q.max[1] <= o.max[1] + tol;
+  const groupRoots = [...boxOf.keys()];
+  const into = new Map<number, number>();
+  for (const r of groupRoots) {
+    const q = boxOf.get(r)!;
+    let best = -1;
+    let bestArea = Infinity;
+    for (const o of groupRoots) {
+      if (o === r) continue;
+      const ob = boxOf.get(o)!;
+      const oa = area(ob);
+      // Eşit kutular (aynı konturun kopyası) birbirine katılmasın diye içeren kesin büyük olmalı
+      if (oa > area(q) + tol && oa < bestArea && inside(q, ob)) {
+        best = o;
+        bestArea = oa;
+      }
+    }
+    if (best >= 0) into.set(r, best);
+  }
+  for (const [r, o] of into) union(r, o);
+  // Grup no: kutu sol üstüne göre sıralı
+  const roots = [...new Set(prims.map((_, i) => find(i)))];
+  const corner = new Map<number, Vec2>();
+  for (const r of roots) {
+    const b = primBounds(prims.filter((_, i) => find(i) === r))!;
+    corner.set(r, [b.min[0], b.max[1]]);
+  }
+  roots.sort((a, b) => {
+    const A = corner.get(a)!;
+    const B = corner.get(b)!;
+    return Math.abs(A[1] - B[1]) > 1e-6 ? B[1] - A[1] : A[0] - B[0];
+  });
+  const idx = new Map(roots.map((r, i) => [r, i]));
+  return prims.map((_, i) => idx.get(find(i))!);
+}
+
+/**
+ * Önerilen birim (1 birim kaç mm). Dosyadaki birim ölçüleri makul değilse (profil 0,5 mm'den küçük ya da
+ * 10 m'den büyük çıkıyorsa) ve mm makulse mm önerilir; note uyarı metnidir.
+ */
+export function suggestUnit(data: DxfData): { unitMm: number; note?: string } {
+  const bb = primBounds(data.prims);
+  const size = bb ? Math.max(bb.max[0] - bb.min[0], bb.max[1] - bb.min[1]) : 0;
+  const ok = (mm: number) => size * mm >= 0.5 && size * mm <= 10000;
+  if (data.unitMm && ok(data.unitMm)) return { unitMm: data.unitMm };
+  if (data.unitMm && ok(1)) {
+    return {
+      unitMm: 1,
+      note: `Dosyadaki birim ölçülere uymuyor (${fmtMm(size * data.unitMm)} çıkıyordu); mm kabul edildi.`,
+    };
+  }
+  return { unitMm: data.unitMm ?? 1 };
+}
+
+const fmtMm = (mm: number) => (mm >= 1000 ? `${Number((mm / 1000).toFixed(1))} m` : `${Number(mm.toFixed(2))} mm`);
 
 // ---------------------------------------------------------------- sketch'e çevirme
 
@@ -482,7 +597,8 @@ export interface DxfSketchResult {
 
 /**
  * Yerleştirilmiş eğrileri sketch varlıklarına çevirir: toleransla yakın uçlar tek noktada birleşir, başka
- * bir çizginin ortasına değen uçta o çizgi bölünür (bölge bulma için), kopyalar silinir. Tüm varlıklar
+ * bir eğrinin ortasına değen uçta ve kesişen eğrilerin kesişme noktasında eğriler bölünür (bölge bulma için),
+ * kopyalar silinir. Tüm varlıklar
  * ext = extId taşır (çözücüde sabit; biri silinince içe aktarmanın tamamı silinir).
  */
 export function dxfToSketch(prims: DxfPrim[], extId: string, newId: (prefix: string) => string, tol = 0.01): DxfSketchResult {
@@ -515,7 +631,7 @@ export function dxfToSketch(prims: DxfPrim[], extId: string, newId: (prefix: str
   type L = { a: number; b: number };
   type A = { c: Vec2; r: number; s: number; e: number };
   let lines: L[] = [];
-  const arcs: A[] = [];
+  let arcs: A[] = [];
   const circles: { c: Vec2; r: number }[] = [];
   for (const p of prims) {
     if (p.kind === 'line') {
@@ -535,45 +651,191 @@ export function dxfToSketch(prims: DxfPrim[], extId: string, newId: (prefix: str
     } else circles.push({ c: p.c, r: p.r });
   }
 
-  // 2) T-kesişimleri: bir uç başka bir çizginin içine düşüyorsa çizgiyi böl
-  const used = new Set<number>();
-  for (const l of lines) used.add(l.a).add(l.b);
-  for (const a of arcs) used.add(a.s).add(a.e);
-  const endpoints = [...used];
-  const next: L[] = [];
-  for (const l of lines) {
+  // 2) Bölme: başka bir eğrinin ucu bir eğrinin içine düşüyorsa (T) ya da iki eğri kesişiyorsa (X), eğriler o
+  // noktada bölünür. Bölge bulma kesişmelerin nokta olarak tanımlı olmasını ister; yoksa kontur kendini keser ve
+  // çekirdek geçersiz yüz üretir (katalog çizimlerinde uzatılmış/çakışan çizgiler sık görülür).
+  type Cut = { t: number; i: number };
+  const ang = (c: Vec2, p: Vec2) => Math.atan2(p[1] - c[1], p[0] - c[0]);
+  // Bir çizginin kestiği ya da bir ucun değdiği daire, o noktadan başlayan tam tur yaya çevrilir (bölünebilsin)
+  for (let ci = circles.length - 1; ci >= 0; ci--) {
+    const cc = circles[ci];
+    let hit: Vec2 | null = null;
+    for (const p of [...lines.flatMap((l) => [pts[l.a], pts[l.b]]), ...arcs.flatMap((q) => [pts[q.s], pts[q.e]])])
+      if (Math.abs(dist(p, cc.c) - cc.r) <= tol) {
+        hit = p;
+        break;
+      }
+    for (let k = 0; !hit && k < lines.length; k++) {
+      const A = pts[lines[k].a];
+      const D: Vec2 = [pts[lines[k].b][0] - A[0], pts[lines[k].b][1] - A[1]];
+      const F: Vec2 = [A[0] - cc.c[0], A[1] - cc.c[1]];
+      const a2 = D[0] * D[0] + D[1] * D[1];
+      const b2 = 2 * (D[0] * F[0] + D[1] * F[1]);
+      const disc = b2 * b2 - 4 * a2 * (F[0] * F[0] + F[1] * F[1] - cc.r * cc.r);
+      if (disc < 0) continue;
+      for (const t of [(-b2 - Math.sqrt(disc)) / (2 * a2), (-b2 + Math.sqrt(disc)) / (2 * a2)])
+        if (t > 0 && t < 1) {
+          hit = [A[0] + D[0] * t, A[1] + D[1] * t];
+          break;
+        }
+    }
+    if (!hit) continue;
+    const i = snap(hit);
+    arcs.push({ c: cc.c, r: cc.r, s: i, e: i });
+    circles.splice(ci, 1);
+  }
+  const arcG = arcs.map((q) => {
+    const a0 = ang(q.c, pts[q.s]);
+    let sw = (((ang(q.c, pts[q.e]) - a0) % TAU) + TAU) % TAU;
+    if (sw < 1e-12) sw = TAU;
+    return { a0, sw };
+  });
+  const lineCuts: Cut[][] = lines.map(() => []);
+  const arcCuts: Cut[][] = arcs.map(() => []);
+  type Box = { x0: number; y0: number; x1: number; y1: number };
+  const lineBox: Box[] = lines.map((l) => {
     const A = pts[l.a];
     const B = pts[l.b];
+    return { x0: Math.min(A[0], B[0]) - tol, y0: Math.min(A[1], B[1]) - tol, x1: Math.max(A[0], B[0]) + tol, y1: Math.max(A[1], B[1]) + tol };
+  });
+  const arcBox: Box[] = arcs.map((q) => ({ x0: q.c[0] - q.r - tol, y0: q.c[1] - q.r - tol, x1: q.c[0] + q.r + tol, y1: q.c[1] + q.r + tol }));
+  const overlap = (u: Box, v: Box) => u.x0 <= v.x1 && v.x0 <= u.x1 && u.y0 <= v.y1 && v.y0 <= u.y1;
+  const inBox = (u: Box, P: Vec2) => P[0] >= u.x0 && P[0] <= u.x1 && P[1] >= u.y0 && P[1] <= u.y1;
+
+  /** Çizgi içi parametre (uçlara tol'dan yakınsa null) */
+  const lineT = (k: number, P: Vec2): number | null => {
+    const A = pts[lines[k].a];
+    const B = pts[lines[k].b];
     const dx = B[0] - A[0];
     const dy = B[1] - A[1];
     const len2 = dx * dx + dy * dy;
     const len = Math.sqrt(len2);
-    const minX = Math.min(A[0], B[0]) - tol, maxX = Math.max(A[0], B[0]) + tol;
-    const minY = Math.min(A[1], B[1]) - tol, maxY = Math.max(A[1], B[1]) + tol;
-    const cuts: { t: number; i: number }[] = [];
-    for (const i of endpoints) {
-      if (i === l.a || i === l.b) continue;
-      const P = pts[i];
-      if (P[0] < minX || P[0] > maxX || P[1] < minY || P[1] > maxY) continue;
-      const t = ((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / len2;
-      if (t * len <= tol || (1 - t) * len <= tol) continue;
-      const off = Math.abs((P[0] - A[0]) * dy - (P[1] - A[1]) * dx) / len;
-      if (off <= tol) cuts.push({ t, i });
+    const t = ((P[0] - A[0]) * dx + (P[1] - A[1]) * dy) / len2;
+    if (t * len <= tol || (1 - t) * len <= tol) return null;
+    const off = Math.abs((P[0] - A[0]) * dy - (P[1] - A[1]) * dx) / len;
+    return off <= tol ? t : null;
+  };
+  /** Yay içi açı ofseti (uçlara tol'dan yakınsa ya da yay dışındaysa null) */
+  const arcT = (k: number, P: Vec2): number | null => {
+    const q = arcs[k];
+    if (Math.abs(dist(P, q.c) - q.r) > tol) return null;
+    const g = arcG[k];
+    const o = (((ang(q.c, P) - g.a0) % TAU) + TAU) % TAU;
+    if (o * q.r <= tol || (g.sw - o) * q.r <= tol) return null;
+    return o;
+  };
+  /** Kesişme noktasını iki eğriye de keser (nokta uçlardan birine birleşirse kesmez) */
+  const cutAt = (P: Vec2, onLines: number[], onArcs: number[]) => {
+    const tl = onLines.map((k) => lineT(k, P));
+    const ta = onArcs.map((k) => arcT(k, P));
+    if (tl.some((t) => t === null) || ta.some((t) => t === null)) return;
+    const i = snap(P);
+    onLines.forEach((k, j) => {
+      if (i !== lines[k].a && i !== lines[k].b) lineCuts[k].push({ t: tl[j]!, i });
+    });
+    onArcs.forEach((k, j) => {
+      if (i !== arcs[k].s && i !== arcs[k].e) arcCuts[k].push({ t: ta[j]!, i });
+    });
+  };
+
+  // (a) T: eğri uçları
+  const used = new Set<number>();
+  for (const l of lines) used.add(l.a).add(l.b);
+  for (const q of arcs) used.add(q.s).add(q.e);
+  for (const i of used) {
+    const P = pts[i];
+    lines.forEach((l, k) => {
+      if (i === l.a || i === l.b || !inBox(lineBox[k], P)) return;
+      const t = lineT(k, P);
+      if (t !== null) lineCuts[k].push({ t, i });
+    });
+    arcs.forEach((q, k) => {
+      if (i === q.s || i === q.e || !inBox(arcBox[k], P)) return;
+      const t = arcT(k, P);
+      if (t !== null) arcCuts[k].push({ t, i });
+    });
+  }
+  // (b) X: kesişen eğri çiftleri
+  for (let k = 0; k < lines.length; k++) {
+    const A = pts[lines[k].a];
+    const D: Vec2 = [pts[lines[k].b][0] - A[0], pts[lines[k].b][1] - A[1]];
+    for (let j = k + 1; j < lines.length; j++) {
+      if (!overlap(lineBox[k], lineBox[j])) continue;
+      const C = pts[lines[j].a];
+      const E: Vec2 = [pts[lines[j].b][0] - C[0], pts[lines[j].b][1] - C[1]];
+      const den = D[0] * E[1] - D[1] * E[0];
+      if (Math.abs(den) < 1e-12 * Math.hypot(...D) * Math.hypot(...E)) continue; // paralel
+      const t = ((C[0] - A[0]) * E[1] - (C[1] - A[1]) * E[0]) / den;
+      if (t <= 0 || t >= 1) continue;
+      cutAt([A[0] + D[0] * t, A[1] + D[1] * t], [k, j], []);
     }
+    for (let j = 0; j < arcs.length; j++) {
+      if (!overlap(lineBox[k], arcBox[j])) continue;
+      const q = arcs[j];
+      const F: Vec2 = [A[0] - q.c[0], A[1] - q.c[1]];
+      const a2 = D[0] * D[0] + D[1] * D[1];
+      const b2 = 2 * (D[0] * F[0] + D[1] * F[1]);
+      const c2 = F[0] * F[0] + F[1] * F[1] - q.r * q.r;
+      const disc = b2 * b2 - 4 * a2 * c2;
+      if (disc < 0) continue;
+      const sq = Math.sqrt(disc);
+      for (const t of sq < 1e-12 ? [-b2 / (2 * a2)] : [(-b2 - sq) / (2 * a2), (-b2 + sq) / (2 * a2)]) {
+        if (t <= 0 || t >= 1) continue;
+        cutAt([A[0] + D[0] * t, A[1] + D[1] * t], [k], [j]);
+      }
+    }
+  }
+  for (let k = 0; k < arcs.length; k++)
+    for (let j = k + 1; j < arcs.length; j++) {
+      if (!overlap(arcBox[k], arcBox[j])) continue;
+      const p = arcs[k];
+      const q = arcs[j];
+      const d = dist(p.c, q.c);
+      if (d < 1e-12 || d > p.r + q.r || d < Math.abs(p.r - q.r)) continue;
+      const a = (p.r * p.r - q.r * q.r + d * d) / (2 * d);
+      const h = Math.sqrt(Math.max(0, p.r * p.r - a * a));
+      const ux = (q.c[0] - p.c[0]) / d;
+      const uy = (q.c[1] - p.c[1]) / d;
+      const m: Vec2 = [p.c[0] + ux * a, p.c[1] + uy * a];
+      for (const P of h < 1e-12 ? [m] : [[m[0] - uy * h, m[1] + ux * h] as Vec2, [m[0] + uy * h, m[1] - ux * h] as Vec2])
+        cutAt(P, [], [k, j]);
+    }
+
+  // Bölmeleri uygula
+  const nextLines: L[] = [];
+  lines.forEach((l, k) => {
+    const cuts = lineCuts[k];
     if (!cuts.length) {
-      next.push(l);
-      continue;
+      nextLines.push(l);
+      return;
     }
-    cuts.sort((x, y) => x.t - y.t);
     stats.split++;
+    cuts.sort((x, y) => x.t - y.t);
     let prev = l.a;
     for (const c of cuts) {
-      if (c.i !== prev) next.push({ a: prev, b: c.i });
+      if (c.i !== prev) nextLines.push({ a: prev, b: c.i });
       prev = c.i;
     }
-    if (prev !== l.b) next.push({ a: prev, b: l.b });
-  }
-  lines = next;
+    if (prev !== l.b) nextLines.push({ a: prev, b: l.b });
+  });
+  const nextArcs: A[] = [];
+  arcs.forEach((q, k) => {
+    const cuts = arcCuts[k];
+    if (!cuts.length) {
+      nextArcs.push(q);
+      return;
+    }
+    stats.split++;
+    cuts.sort((x, y) => x.t - y.t);
+    let prev = q.s;
+    for (const c of cuts) {
+      if (c.i !== prev) nextArcs.push({ c: q.c, r: q.r, s: prev, e: c.i });
+      prev = c.i;
+    }
+    if (prev !== q.e) nextArcs.push({ c: q.c, r: q.r, s: prev, e: q.e });
+  });
+  lines = nextLines;
+  arcs = nextArcs;
 
   // 3) Kopyaları sil
   const seen = new Set<string>();

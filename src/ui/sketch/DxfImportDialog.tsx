@@ -1,9 +1,19 @@
 // DXF içe aktarma penceresi: dosyadaki profil kesitini önizler; birim, katman, dönüş, ayna ve yerleşim
 // seçilir; "İçe aktar" ile açık sketch'e sabit geometri olarak eklenir (ölçüler değişmez, çözücüde sabit).
 // Okuma/temizlik core/import/dxf.ts'te; burada yalnız arayüz.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
-import { dxfToSketch, parseDxf, placeDxf, primBounds, type DxfData, type DxfPlacement, type DxfPrim } from '@/core/import/dxf';
+import {
+  dxfPieces,
+  dxfToSketch,
+  parseDxf,
+  primBounds,
+  suggestUnit,
+  transformPrims,
+  type DxfData,
+  type DxfPlacement,
+  type DxfPrim,
+} from '@/core/import/dxf';
 import { addImportedEntities, newId } from '@/state/sketchSession';
 import { useAssembly } from '@/state/useAssembly';
 import '@/ui/params/params.css';
@@ -83,8 +93,23 @@ function DialogBody({ data, fileName }: { data: DxfData; fileName: string }) {
     return m;
   }, [data]);
   const fileUnit = data.unitMm ? (UNITS.find((u) => Math.abs(u.mm - data.unitMm!) < 1e-9)?.v ?? 'mm') : 'mm';
-  const [unit, setUnit] = useState(fileUnit);
+  const suggested = useMemo(() => suggestUnit(data), [data]);
+  const [unit, setUnit] = useState(UNITS.find((u) => Math.abs(u.mm - suggested.unitMm) < 1e-9)?.v ?? 'mm');
   const [layers, setLayers] = useState<string[]>(data.layers);
+  /** Seçili katmanlardaki eğriler ve ayrı profil grupları */
+  const layerPrims = useMemo(() => data.prims.filter((p) => layers.includes(p.layer)), [data, layers]);
+  const pieceOf = useMemo(() => dxfPieces(layerPrims), [layerPrims]);
+  const nPieces = pieceOf.length ? Math.max(...pieceOf) + 1 : 0;
+  /** Bırakılan (alınmayacak) profil grupları; katman değişince sıfırlanır */
+  const [dropped, setDropped] = useState<Set<number>>(new Set());
+  useEffect(() => setDropped(new Set()), [layerPrims]);
+  const togglePiece = (i: number) =>
+    setDropped((cur) => {
+      const n = new Set(cur);
+      if (n.has(i)) n.delete(i);
+      else n.add(i);
+      return n;
+    });
   const [rotate, setRotate] = useState(0);
   const [mirror, setMirror] = useState(false);
   const [anchor, setAnchor] = useState<DxfPlacement['anchor']>('minCorner');
@@ -97,8 +122,11 @@ function DialogBody({ data, fileName }: { data: DxfData; fileName: string }) {
     const v = parseFloat(s.replace(',', '.'));
     return Number.isFinite(v) ? v : d;
   };
-  const placement: DxfPlacement = { scale, layers, rotate, mirror, anchor, offset: [num(ox), num(oy)] };
-  const placed = useMemo(() => placeDxf(data, placement), [data, scale, layers, rotate, mirror, anchor, ox, oy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const placement: Omit<DxfPlacement, 'layers'> = { scale, rotate, mirror, anchor, offset: [num(ox), num(oy)] };
+  const keep = useMemo(() => pieceOf.map((g) => !dropped.has(g)), [pieceOf, dropped]);
+  // Tüm eğriler aynı dönüşümle; yerleşim yalnız seçili profillerden
+  const all = useMemo(() => transformPrims(layerPrims, placement, keep), [layerPrims, keep, scale, rotate, mirror, anchor, ox, oy]); // eslint-disable-line react-hooks/exhaustive-deps
+  const placed = useMemo(() => all.filter((_, i) => keep[i]), [all, keep]);
   const bb = primBounds(placed);
   const skipped = Object.entries(data.skipped)
     .map(([k, n]) => `${n} ${SKIP_NAMES[k] ?? k.toLowerCase()}`)
@@ -131,7 +159,7 @@ function DialogBody({ data, fileName }: { data: DxfData; fileName: string }) {
           </button>
         </div>
         <div className="pd-body dxf-body">
-          <Preview prims={placed} />
+          <Preview prims={all} pieceOf={pieceOf} keep={keep} onToggle={nPieces > 1 ? togglePiece : undefined} />
           <div className="dxf-opts">
             <label className="dxf-row">
               <span>Birim</span>
@@ -191,7 +219,28 @@ function DialogBody({ data, fileName }: { data: DxfData; fileName: string }) {
                 </label>
               ))}
             </div>
+            {suggested.note && unit === 'mm' && <p className="pd-help pd-help-sm dxf-note">{suggested.note}</p>}
+            {nPieces > 1 && (
+              <div className="dxf-row">
+                <span>
+                  Profiller: {nPieces - dropped.size} / {nPieces} seçili
+                </span>
+                <span className="dxf-xy">
+                  <button type="button" className="btn btn-small" onClick={() => setDropped(new Set())}>
+                    Tümü
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={() => setDropped(new Set(Array.from({ length: nPieces }, (_, i) => i)))}
+                  >
+                    Hiçbiri
+                  </button>
+                </span>
+              </div>
+            )}
             <p className="pd-help pd-help-sm">
+              {nPieces > 1 && <>Önizlemede bir profile tıklayarak seçin ya da bırakın.<br /></>}
               {bb ? `Boyut: ${fmt(bb.max[0] - bb.min[0])} × ${fmt(bb.max[1] - bb.min[1])} mm · ${placed.length} eğri` : 'Seçili katmanda eğri yok'}
               {skipped && <><br />Atlanan: {skipped}</>}
               <br />
@@ -214,8 +263,42 @@ function DialogBody({ data, fileName }: { data: DxfData; fileName: string }) {
 
 const fmt = (v: number) => String(Number(v.toFixed(2)));
 
-/** Önizleme: yerleştirilmiş eğriler + sketch orijini (y yukarı) */
-function Preview({ prims }: { prims: DxfPrim[] }) {
+/** Eğrinin SVG yolu */
+function primPath(p: DxfPrim): string {
+  if (p.kind === 'line') return `M${p.a[0]} ${p.a[1]}L${p.b[0]} ${p.b[1]}`;
+  if (p.kind === 'circle') return `M${p.c[0] + p.r} ${p.c[1]}A${p.r} ${p.r} 0 1 1 ${p.c[0] - p.r} ${p.c[1]}A${p.r} ${p.r} 0 1 1 ${p.c[0] + p.r} ${p.c[1]}`;
+  let sweep = (((p.a1 - p.a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  if (sweep < 1e-12) sweep = 2 * Math.PI;
+  const s = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] + p.r * Math.sin(p.a0)];
+  const e = [p.c[0] + p.r * Math.cos(p.a1), p.c[1] + p.r * Math.sin(p.a1)];
+  return `M${s[0]} ${s[1]}A${p.r} ${p.r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${e[0]} ${e[1]}`;
+}
+
+/**
+ * Önizleme: yerleştirilmiş eğriler + sketch orijini (y yukarı). Birden çok profil varsa her grup ayrı
+ * çizilir; tıklanınca seçilir/bırakılır (bırakılan soluk). Görünüm seçili profillere ve orijine sığar.
+ */
+function Preview({
+  prims,
+  pieceOf,
+  keep,
+  onToggle,
+}: {
+  prims: DxfPrim[];
+  pieceOf: number[];
+  keep: boolean[];
+  onToggle?: (piece: number) => void;
+}) {
+  const groups = useMemo(() => {
+    const m = new Map<number, { d: string[]; on: boolean }>();
+    prims.forEach((p, i) => {
+      const g = pieceOf[i] ?? 0;
+      const cur = m.get(g) ?? { d: [], on: keep[i] };
+      cur.d.push(primPath(p));
+      m.set(g, cur);
+    });
+    return [...m.entries()].map(([g, v]) => ({ g, d: v.d.join(''), on: v.on }));
+  }, [prims, pieceOf, keep]);
   const bb = primBounds(prims);
   if (!bb) return <div className="dxf-preview dxf-empty">Önizleme yok</div>;
   // Orijin de görünsün
@@ -227,23 +310,23 @@ function Preview({ prims }: { prims: DxfPrim[] }) {
   const h = Math.max(y1 - y0, 1e-6);
   const pad = Math.max(w, h) * 0.06;
   const sw = Math.max(w, h) / 400;
-  const d = prims
-    .map((p) => {
-      if (p.kind === 'line') return `M${p.a[0]} ${p.a[1]}L${p.b[0]} ${p.b[1]}`;
-      if (p.kind === 'circle') return `M${p.c[0] + p.r} ${p.c[1]}A${p.r} ${p.r} 0 1 1 ${p.c[0] - p.r} ${p.c[1]}A${p.r} ${p.r} 0 1 1 ${p.c[0] + p.r} ${p.c[1]}`;
-      let sweep = (((p.a1 - p.a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      if (sweep < 1e-12) sweep = 2 * Math.PI;
-      const s = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] + p.r * Math.sin(p.a0)];
-      const e = [p.c[0] + p.r * Math.cos(p.a1), p.c[1] + p.r * Math.sin(p.a1)];
-      return `M${s[0]} ${s[1]}A${p.r} ${p.r} 0 ${sweep > Math.PI ? 1 : 0} 1 ${e[0]} ${e[1]}`;
-    })
-    .join('');
   const o = Math.max(w, h) * 0.04;
   return (
     <svg className="dxf-preview" viewBox={`${x0 - pad} ${-(y1 + pad)} ${w + 2 * pad} ${h + 2 * pad}`} preserveAspectRatio="xMidYMid meet">
       <g transform="scale(1,-1)">
         <path d={`M${-o} 0H${o}M0 ${-o}V${o}`} className="dxf-origin" strokeWidth={sw} />
-        <path d={d} className="dxf-curves" strokeWidth={sw * 1.4} fill="none" />
+        {groups.map(({ g, d, on }) => (
+          <path
+            key={g}
+            d={d}
+            className={`dxf-curves${on ? '' : ' off'}${onToggle ? ' pick' : ''}`}
+            strokeWidth={sw * 1.4}
+            fill="none"
+            onClick={onToggle ? () => onToggle(g) : undefined}
+          >
+            {onToggle && <title>{on ? 'Bırakmak için tıklayın' : 'Seçmek için tıklayın'}</title>}
+          </path>
+        ))}
       </g>
     </svg>
   );

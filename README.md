@@ -27,11 +27,14 @@ ilk girildiğinde arka planda yüklenir.
 - Parçaları gizmo ile taşıyın/döndürün (W/E), **Zemine oturt** (G). Fareyle: parçaya sol basıp sürükle =
   döndür (kendi merkezi etrafında), sağ basıp sürükle = taşı; mate'li parça yalnız serbest yönlerinde hareket eder.
 - **DXF içe aktar** (Çizim sekmesi, sketch açıkken): profil kesitini sabit geometri olarak sketch'e alır.
-  Katman, birim, döndürme, ayna ve yerleşim seçilir; açık uçlar birleştirilir, kopyalar silinir. DWG'yi önce
-  AutoCAD'de DXF olarak kaydedin.
+  Katman, birim, döndürme, ayna ve yerleşim seçilir; çizimde birden çok profil varsa önizlemede tıklayarak
+  istenen profil seçilir. Açık uçlar birleştirilir, kesişen çizgiler bölünür, kopyalar silinir; dosyadaki birim
+  ölçülere uymuyorsa mm önerilir. Dolu/boş ayrımı tek-çift kuralıyla yapılır (her çizgi metal ile havayı ayırır).
+  DWG'yi önce AutoCAD'de DXF olarak kaydedin.
 - **Süpür** (Özellikler sekmesi): profil sketch'ini bir yol sketch'i (çizgi/yay zinciri) boyunca süpürür.
   "Yolun başına" yerleşimde profil otomatik yola dik konur; kapalı yolda (ör. FFB × FFH dikdörtgen) köşeleri
-  gönyeli bir kasa çıkar. Döndür 180° ile profil yolun içine alınır.
+  gönyeli bir kasa çıkar (düz kenarlarda her kenar uzatılıp açıortaydan kesilir). Döndür 180° ile profil yolun
+  içine alınır; "Sonucu birleştir" kapalıysa her çıta montajda ayrı parça olur.
 - Extrude/Revolve'da **Sonucu birleştir** kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur
   (birbirine değmeyen bölgeler de ayrı parça olur).
 - **Mate (M)**: önce yerinde kalacak referans yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın.

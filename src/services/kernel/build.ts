@@ -2,6 +2,7 @@
 // Worker'dan bağımsızdır (Node testlerinde de çalışır); setOC() önceden çağrılmış olmalıdır.
 import {
   addHolesInFace,
+  getOC,
   assembleWire,
   basicFaceExtrusion,
   genericSweep,
@@ -356,19 +357,46 @@ function sketchOf(st: State, id: string): SketchFeature {
   throw new FeatureError('Sketch bulunamadı');
 }
 
-function profileFaces(sk: SketchFeature, profilePoints: Vec2[]): { frame: Frame; faces: Face[]; regions: Region[] } {
+function profileRegions(sk: SketchFeature, profilePoints: Vec2[]): { frame: Frame; regions: Region[] } {
   const regions = selectRegions(findRegions(sk.entities), profilePoints);
   if (!regions.length) throw new FeatureError('Kapalı profil bulunamadı');
-  const frame = frameOf(sk.plane);
-  const faces: Face[] = [];
-  for (const r of regions) {
-    try {
-      faces.push(regionFace(frame, r));
-    } catch (e) {
-      throw new FeatureError(errText(e, 'Profil yüzeyi oluşturulamadı'));
-    }
+  return { frame: frameOf(sk.plane), regions };
+}
+
+/** OpenCascade geçerlilik denetimi */
+function isValidShape(s: AnyShape): boolean {
+  const oc = getOC() as unknown as { BRepCheck_Analyzer: new (s: unknown, a: boolean, b: boolean) => { IsValid_1?: () => boolean; IsValid?: () => boolean; delete(): void } };
+  const a = new oc.BRepCheck_Analyzer(s.wrapped, true, false);
+  try {
+    return a.IsValid_1 ? a.IsValid_1() : !!a.IsValid?.();
+  } finally {
+    a.delete();
   }
-  return { frame, faces, regions };
+}
+
+/**
+ * Bölgeden katı: prism(yüz) ile (uzatma / döndürme). Delikli yüz geçersizse (ör. DXF'te bir delik dış
+ * kontura bir köşede değiyor) dış konturun katısından delik katıları çıkarılır; katı Boolean'ı bunu işler.
+ */
+function regionSolid(f: Frame, r: Region, prism: (face: Face) => Shape3D): Shape3D {
+  let face: Face;
+  try {
+    face = regionFace(f, r);
+  } catch (e) {
+    if (!r.holes.length) throw new FeatureError(errText(e, 'Profil yüzeyi oluşturulamadı'));
+    face = null as unknown as Face;
+  }
+  if (face && (!r.holes.length || isValidShape(face))) return prism(face);
+  let s: Shape3D;
+  try {
+    s = prism(regionFace(f, { ...r, holes: [] }));
+    const hs = r.holes.map((h) => prism(regionFace(f, { ...r, outer: h, holes: [] })));
+    s = s.cut(compoundOf(hs));
+  } catch (e) {
+    throw new FeatureError(errText(e, 'Profil yüzeyi oluşturulamadı'));
+  }
+  if (!solidCount(s)) throw new FeatureError('Profil yüzeyi oluşturulamadı');
+  return s;
 }
 
 function regionsExtent(regions: Region[]): number {
@@ -384,7 +412,7 @@ function regionsExtent(regions: Region[]): number {
 
 function doExtrude(st: State, ft: ExtrudeFeature) {
   const sk = sketchOf(st, ft.sketchId);
-  const { frame, faces, regions } = profileFaces(sk, ft.profilePoints);
+  const { frame, regions } = profileRegions(sk, ft.profilePoints);
   let s0: number;
   let s1: number;
   const sign = ft.reverse ? -1 : 1;
@@ -406,11 +434,11 @@ function doExtrude(st: State, ft: ExtrudeFeature) {
       [s0, s1] = sign > 0 ? [0, d] : [-d, 0];
     }
   }
-  const solids: Shape3D[] = [];
-  for (const face of faces) {
-    const base = s0 !== 0 ? face.translate(mul(frame.n, s0)) : face;
-    solids.push(basicFaceExtrusion(base, new Vector(mul(frame.n, s1 - s0))));
-  }
+  const solids = regions.map((r) =>
+    regionSolid(frame, r, (face) =>
+      basicFaceExtrusion(s0 !== 0 ? face.translate(mul(frame.n, s0)) : face, new Vector(mul(frame.n, s1 - s0))),
+    ),
+  );
   const tool = solids.length === 1 ? solids[0] : fuseAll(solids);
   applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
   st.tools.set(ft.id, [{ op: ft.operation, shape: tool }]);
@@ -425,7 +453,7 @@ function doRevolve(st: State, ft: RevolveFeature) {
     if (!p || p.kind !== 'point') throw new FeatureError('Dönme ekseni bulunamadı');
     return [p.x, p.y] as Vec2;
   };
-  const { frame, faces } = profileFaces(sk, ft.profilePoints);
+  const { frame, regions } = profileRegions(sk, ft.profilePoints);
   const a = to3(frame, pt(axisEnt.p1));
   const b = to3(frame, pt(axisEnt.p2));
   if (vlen(sub(b, a)) < 1e-9) throw new FeatureError('Dönme ekseni geçersiz');
@@ -433,9 +461,9 @@ function doRevolve(st: State, ft: RevolveFeature) {
   if (!(angle > 0)) throw new FeatureError('Açı sıfırdan büyük olmalı');
   const dir = mul(unit(sub(b, a)), ft.reverse ? -1 : 1);
   const solids: Shape3D[] = [];
-  for (const face of faces) {
+  for (const r of regions) {
     try {
-      solids.push(revolution(face, a, dir, angle));
+      solids.push(regionSolid(frame, r, (face) => revolution(face, a, dir, angle)));
     } catch (e) {
       throw new FeatureError(errText(e, 'Döndürme başarısız (profil ekseni kesiyor olabilir)'));
     }
@@ -619,6 +647,92 @@ function pathEdge(f: Frame, s: PathSeg): Edge {
   return makeThreePointArc(to3(f, s.a), to3(f, [s.c[0] + s.r * Math.cos(t), s.c[1] + s.r * Math.sin(t)]), to3(f, s.b));
 }
 
+
+/** Çerçeve → başka bir çerçevenin yerel koordinatı (o, x, y, n bileşenleri) */
+function frameIn(f: Frame, base: Frame): { o: Vec3; x: Vec3; y: Vec3; n: Vec3 } {
+  const loc = (v: Vec3): Vec3 => [dot(v, base.x), dot(v, base.y), dot(v, base.n)];
+  return { o: loc(sub(f.o, base.o)), x: loc(f.x), y: loc(f.y), n: loc(f.n) };
+}
+function frameFrom(l: { o: Vec3; x: Vec3; y: Vec3; n: Vec3 }, base: Frame): Frame {
+  const g = (v: Vec3): Vec3 => add(add(mul(base.x, v[0]), mul(base.y, v[1])), mul(base.n, v[2]));
+  return { o: add(base.o, g(l.o)), x: g(l.x), y: g(l.y), n: g(l.n) };
+}
+
+/** Düz kenarlı yolun k. kenarının başlangıç çerçevesi: n = kenar yönü, x = yol düzlemi normali, y = n × x */
+export function lineFrame(pf: Frame, s: { a: Vec2; b: Vec2 }): Frame {
+  const n = unit(sub(to3(pf, s.b), to3(pf, s.a)));
+  return { o: to3(pf, s.a), x: pf.n, y: cross(n, pf.n), n };
+}
+
+/**
+ * Düz kenarlı yolda gönyeli süpürme: her kenar için profil düz uzatılır, uçları köşenin açıortay düzleminden
+ * kesilir (atölyedeki gönye kesimi). Boru süpürmesinden sağlamdır; her kenar ayrı katı (çıta) döner.
+ * profileLocal: profil çerçevesinin ilk kenar çerçevesine göre konumu (her kenara aynı yerleşim uygulanır).
+ */
+export function miterBars(
+  pf: Frame,
+  segs: { a: Vec2; b: Vec2 }[],
+  closed: boolean,
+  regions: Region[],
+  profileLocal: { o: Vec3; x: Vec3; y: Vec3; n: Vec3 },
+): Shape3D[] {
+  const frames = segs.map((s) => lineFrame(pf, s));
+  const dirs = frames.map((f) => f.n);
+  const nSeg = segs.length;
+  // Profil boyutu → uzatma payı ve kesme kutusu büyüklüğü
+  let ext = 1;
+  for (const r of regions) for (const sg of r.outer.segs) {
+    const pts = sg.kind === 'circle' ? [[sg.c[0] + sg.r, sg.c[1] + sg.r]] : [sg.a, sg.b];
+    for (const p of pts) ext = Math.max(ext, Math.hypot(p[0], p[1]));
+  }
+  ext += vlen(profileLocal.o);
+  const pad = ext * 4 + 10;
+  /** v noktasında, m normalli düzlemin "dir" tarafını (m yönünde +1 / ters −1) kaplayan dilim */
+  const slab = (v: Vec3, m: Vec3, side: 1 | -1, big: number): Shape3D => {
+    const u = pf.n;
+    const w = cross(m, u);
+    const pts = [
+      add(add(v, mul(u, big)), mul(w, big)),
+      add(add(v, mul(u, -big)), mul(w, big)),
+      add(add(v, mul(u, -big)), mul(w, -big)),
+      add(add(v, mul(u, big)), mul(w, -big)),
+    ];
+    return basicFaceExtrusion(makePolygon(pts), new Vector(mul(m, side * big)));
+  };
+  const bars: Shape3D[] = [];
+  for (let k = 0; k < nSeg; k++) {
+    const prev = k > 0 ? k - 1 : closed ? nSeg - 1 : -1;
+    const next = k < nSeg - 1 ? k + 1 : closed ? 0 : -1;
+    const f = frameFrom(profileLocal, frames[k]);
+    const L = vlen(sub(to3(pf, segs[k].b), to3(pf, segs[k].a)));
+    const before = prev >= 0 ? pad : 0;
+    const after = next >= 0 ? pad : 0;
+    let bar: Shape3D;
+    try {
+      const parts = regions.map((r) =>
+        regionSolid(f, r, (face) => basicFaceExtrusion(face.translate(mul(dirs[k], -before)), new Vector(mul(dirs[k], L + before + after)))),
+      );
+      bar = parts.length === 1 ? parts[0] : fuseAll(parts);
+      const big = pad + L;
+      if (next >= 0) {
+        const m = unit(add(dirs[k], dirs[next]));
+        if (vlen(add(dirs[k], dirs[next])) < 1e-6) throw new FeatureError('Yol kendi üzerine dönüyor');
+        bar = bar.cut(slab(to3(pf, segs[k].b), m, 1, big));
+      }
+      if (prev >= 0) {
+        const m = unit(add(dirs[prev], dirs[k]));
+        if (vlen(add(dirs[prev], dirs[k])) < 1e-6) throw new FeatureError('Yol kendi üzerine dönüyor');
+        bar = bar.cut(slab(to3(pf, segs[k].a), m, -1, big));
+      }
+    } catch (e) {
+      throw new FeatureError(errText(e, `Gönye kesimi başarısız (${k + 1}. kenar)`));
+    }
+    if (!solidCount(bar)) throw new FeatureError(`${k + 1}. kenarda katı oluşmadı`);
+    bars.push(bar);
+  }
+  return bars;
+}
+
 function doSweep(st: State, ft: SweepFeature) {
   const prof = sketchOf(st, ft.sketchId);
   if (!ft.pathSketchId) throw new FeatureError('Yol sketch\'i seçilmedi');
@@ -627,7 +741,29 @@ function doSweep(st: State, ft: SweepFeature) {
   const regions = selectRegions(findRegions(prof.entities), ft.profilePoints);
   if (!regions.length) throw new FeatureError('Profil sketch\'inde kapalı bölge bulunamadı');
   const pf = frameOf(pathSk.plane);
-  let { segs, closed } = pathChain(pathSk);
+  const chain = pathChain(pathSk);
+  const closed = chain.closed;
+  // Profil çerçevesi (auto): kenar başında, yola dik; x = yol düzlemi normali, y = yolun sağı.
+  // rotate n etrafında döndürür; flip x ve n'yi birlikte çevirir (sağ el kuralı korunur, y aynı kalır).
+  const autoLocal = () => {
+    const ang = ((ft.rotate || 0) * Math.PI) / 180;
+    const sgn = ft.flip ? -1 : 1;
+    const x: Vec3 = [Math.cos(ang) * sgn, Math.sin(ang) * sgn, 0];
+    const n: Vec3 = [0, 0, sgn];
+    return { o: [0, 0, 0] as Vec3, x, y: cross(n, x), n };
+  };
+  // Düz kenarlı yol + gönyeli köşe: kenar başına çıta, açıortaydan kesim
+  if (ft.corner !== 'round' && chain.segs.every((s) => s.kind === 'line')) {
+    const lines = chain.segs as { kind: 'line'; a: Vec2; b: Vec2 }[];
+    const base = lineFrame(pf, lines[0]);
+    const local = ft.placement === 'auto' ? autoLocal() : frameIn(frameOf(prof.plane), base);
+    const bars = miterBars(pf, lines, closed, regions, local);
+    const tool = compoundOf(bars);
+    applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
+    st.tools.set(ft.id, [{ op: ft.operation, shape: tool }]);
+    return;
+  }
+  let segs = chain.segs;
   if (closed && ft.placement === 'auto') segs = startAtMid(segs);
   let spine: Wire;
   try {

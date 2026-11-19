@@ -8,3 +8,4 @@ public/occt-import-js.wasm
 *.step
 *.stp
 *.STP
+public/_tmp/

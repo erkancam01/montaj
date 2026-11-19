@@ -1,7 +1,7 @@
 // DXF içe aktarma testleri. Çalıştırma: node scripts/run-ts.mjs scripts/dxf-tests.ts
 // Örnek profil DXF'i (scripts/fixtures/ornek-profil.dxf) burada üretilir; tarayıcıda denemek için de kullanılır.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dxfToSketch, parseDxf, placeDxf, primBounds } from '../src/core/import/dxf';
+import { dxfPieces, dxfToSketch, parseDxf, placeDxf, primBounds, suggestUnit } from '../src/core/import/dxf';
 import { findRegions } from '../src/core/sketch/profiles';
 
 let failed = 0;
@@ -100,6 +100,50 @@ check('aynada da aynı alan', !!mOuter && near(mOuter.area, fullArea - inner - s
 const cw = parseDxf(dxf([], [], ['0', 'LWPOLYLINE', '8', '0', '90', '2', '70', '0', '10', '0', '20', '0', '42', '-1', '10', '10', '20', '0']));
 const a = cw.prims[0];
 check('negatif bulge (cw): yay gidiş yönünün solunda (üstte)', a.kind === 'arc' && near(a.c[0], 5) && near(a.a0, 0, 1e-9) && near(a.a1, Math.PI, 1e-9), JSON.stringify(a));
+
+// Profil grupları: profil + iç odacık + vida dairesi tek grup; yanına konan ikinci profil ayrı grup
+const twoProfiles = parseDxf(
+  dxf([], [], [...roundedRect(0, 0, 50, 30, 2), ...line(5, 5, 45, 5), ...line(45, 5, 45, 25), ...line(45, 25, 5, 25), ...line(5, 25, 5, 5), ...circle(25, 27.5, 1.5),
+    ...roundedRect(48, 10, 30, 40, 2)]),
+);
+const pieces = dxfPieces(twoProfiles.prims);
+check('iki profil: 2 grup (kısmen kesişen kutular ayrı)', new Set(pieces).size === 2, JSON.stringify(pieces));
+check('odacık ve vida dairesi profile katıldı', pieces.slice(0, 13).every((g) => g === pieces[0]), JSON.stringify(pieces));
+
+// Birim önerisi: dosya metre diyor ama ölçüler mm (ör. 187 birim genişlik)
+const wrongUnit = parseDxf(dxf(['9', '$INSUNITS', '70', '6'], [], [...line(0, 0, 187, 0), ...line(187, 0, 187, 75)]));
+const su = suggestUnit(wrongUnit);
+check('yanlış birim → mm önerisi', su.unitMm === 1 && !!su.note, JSON.stringify(su));
+check('doğru birim korunur', suggestUnit(d).unitMm === 1 && !suggestUnit(d).note);
+
+// Köprü: dış kare ile iç kareyi bağlayan kısa çizgi alan sınırlamaz → iç kare delik olur, döngü kendine değmez
+const bridged = parseDxf(
+  dxf([], [], [...line(0, 0, 40, 0), ...line(40, 0, 40, 40), ...line(40, 40, 0, 40), ...line(0, 40, 0, 0),
+    ...line(10, 10, 30, 10), ...line(30, 10, 30, 30), ...line(30, 30, 10, 30), ...line(10, 30, 10, 10),
+    ...line(30, 20, 40, 20)]),
+);
+let nb = 0;
+const bReg = findRegions(dxfToSketch(placeDxf(bridged, { scale: 1, layers: bridged.layers, rotate: 0, mirror: false, anchor: 'origin', offset: [0, 0] }), 'b', (p) => `${p}${++nb}`).entities);
+const bOuter = bReg.find((g) => g.depth === 0);
+const verts = bOuter ? bOuter.outer.segs.map((sg) => (sg.kind === 'circle' ? '' : `${sg.a[0]},${sg.a[1]}`)) : [];
+check('köprü atıldı: iç kare delik', !!bOuter && bOuter.holes.length === 1 && near(bOuter.area, 1600 - 400, 1e-6), bReg.map((g) => `${g.depth}:${g.holes.length}:${g.area}`).join(' '));
+check('köprü atıldı: dış döngü kendine değmiyor', new Set(verts).size === verts.length, verts.join(' '));
+
+// Kesişen eğriler: üst üste binen iki dikdörtgen + daireyi kesen çizgi → kesişmelerde bölünür
+const crossing = parseDxf(
+  dxf([], [], [...line(0, 0, 20, 0), ...line(20, 0, 20, 10), ...line(20, 10, 0, 10), ...line(0, 10, 0, 0),
+    ...line(10, 5, 30, 5), ...line(30, 5, 30, 15), ...line(30, 15, 10, 15), ...line(10, 15, 10, 5)]),
+);
+let nc = 0;
+const cr = dxfToSketch(placeDxf(crossing, { scale: 1, layers: crossing.layers, rotate: 0, mirror: false, anchor: 'origin', offset: [0, 0] }), 'c', (p) => `${p}${++nc}`);
+const cReg = findRegions(cr.entities);
+const cSum = cReg.filter((g) => g.depth === 0).reduce((acc, g) => acc + g.area, 0);
+check('kesişen dikdörtgenler bölündü', cr.stats.split === 4 && cReg.length === 3, `${JSON.stringify(cr.stats)} ${cReg.map((g) => `${g.depth}:${g.area}`).join(' ')}`);
+check('tek-çift kuralı: kesişim boş (alan 300)', near(cSum, 300, 1e-6), String(cSum));
+const arcCross = parseDxf(dxf([], [], [...circle(0, 0, 10), ...line(-20, 0, 20, 0), ...line(20, 0, 20, 20), ...line(20, 20, -20, 20), ...line(-20, 20, -20, 0)]));
+const ac = dxfToSketch(placeDxf(arcCross, { scale: 1, layers: arcCross.layers, rotate: 0, mirror: false, anchor: 'origin', offset: [0, 0] }), 'd', (p) => `${p}${++nc}`);
+const acReg = findRegions(ac.entities);
+check('daireyi kesen çizgi: yarım daireler ayrı bölge', acReg.some((g) => near(g.area, Math.PI * 50, 1e-3)), acReg.map((g) => `${g.depth}:${g.area.toFixed(2)}`).join(' '));
 
 // Geçersiz dosya
 let err = '';

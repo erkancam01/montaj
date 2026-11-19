@@ -809,6 +809,26 @@
   stroke-width: 1.4px;
 }
 
+.dxf-curves.off {
+  stroke: var(--text-dim);
+  opacity: 0.35;
+}
+
+.dxf-curves.pick {
+  cursor: pointer;
+  pointer-events: stroke;
+  stroke-width: 2.4px;
+}
+
+.dxf-curves.pick:hover {
+  stroke: var(--warn-text);
+  opacity: 1;
+}
+
+.dxf-note {
+  color: var(--warn-text);
+}
+
 .dxf-origin {
   stroke: var(--warn-text);
   vector-effect: non-scaling-stroke;

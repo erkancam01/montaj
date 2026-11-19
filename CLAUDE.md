@@ -44,7 +44,10 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
 ## Bilinen eksikler / sıradaki fikirler
 - Sketch: trim, teğet yay, spline yok (DXF spline/elips kısa çizgilerle yaklaşık gelir).
 - DXF ile gelen profil sabit geometridir (ext): taşımak için silip yeniden içe aktar. DWG okunmuyor.
-- Süpür: yol tek düzlemsel sketch zinciri; kenar başına ayrı çıta / kesim listesi yok.
+- Süpür: yol tek düzlemsel sketch zinciri. Düz kenarlı yol + gönyeli köşe → `miterBars` (kenar başına çıta,
+  açıortaydan kesim); yay içeren ya da yuvarlak köşeli yol → OCC pipe shell. Kesim listesi yok.
+- Bölge bulma (`core/sketch/profiles.ts`): köprü kenarlar atılır, kendine değen döngüler bölünür, dolu/boş
+  komşu yüzlerde dönüşümlü (tek-çift kuralı). Geçersiz delikli yüzde kernel `regionSolid` katı Boolean'a düşer.
 - Sabite bağlı zincirde uçtaki parça sürüklenince aradaki serbest parça birlikte gelmiyor.
 - Gövdenin ek katıları (ayrı parçalar) montajda taşınmışsa, gövde düzenlenirken sketch'ler asıl parçanın
   çerçevesinde kalır; ek katı yeniden oluşursa (ör. önizlemede "Sonucu birleştir" açılıp kapanınca) konumu/mate'leri sıfırlanır.

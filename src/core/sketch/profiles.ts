@@ -244,6 +244,43 @@ interface HalfEdge {
 }
 
 /** Yardımcı (construction) olmayan eğrilerden kapalı bölgeleri bulur. */
+/** Çoklu graftaki köprü kenarlarının indeksleri (Tarjan, yinelemeli DFS; paralel kenarlar köprü değildir) */
+export function bridgeEdges(nNodes: number, edges: { u: number; v: number }[]): Set<number> {
+  const adj: { to: number; id: number }[][] = Array.from({ length: nNodes }, () => []);
+  edges.forEach((e, id) => {
+    adj[e.u].push({ to: e.v, id });
+    adj[e.v].push({ to: e.u, id });
+  });
+  const disc = new Array(nNodes).fill(-1);
+  const low = new Array(nNodes).fill(0);
+  const bridges = new Set<number>();
+  let time = 0;
+  for (let root = 0; root < nNodes; root++) {
+    if (disc[root] >= 0) continue;
+    const stack: { v: number; pe: number; i: number }[] = [{ v: root, pe: -1, i: 0 }];
+    disc[root] = low[root] = time++;
+    while (stack.length) {
+      const top = stack[stack.length - 1];
+      if (top.i < adj[top.v].length) {
+        const { to, id } = adj[top.v][top.i++];
+        if (id === top.pe) continue;
+        if (disc[to] < 0) {
+          disc[to] = low[to] = time++;
+          stack.push({ v: to, pe: id, i: 0 });
+        } else low[top.v] = Math.min(low[top.v], disc[to]);
+      } else {
+        stack.pop();
+        const parent = stack[stack.length - 1];
+        if (parent) {
+          low[parent.v] = Math.min(low[parent.v], low[top.v]);
+          if (low[top.v] > disc[parent.v]) bridges.add(top.pe);
+        }
+      }
+    }
+  }
+  return bridges;
+}
+
 export function findRegions(entities: SkEntity[]): Region[] {
   const pts = new Map<string, Vec2>();
   for (const e of entities) if (e.kind === 'point') pts.set(e.id, [e.x, e.y]);
@@ -302,24 +339,11 @@ export function findRegions(entities: SkEntity[]): Region[] {
     }
   }
 
-  // Açık uçları buda (derece 1 düğümler)
-  const alive = edges.map(() => true);
-  for (;;) {
-    const deg = new Array(nodes.length).fill(0);
-    edges.forEach((e, i) => {
-      if (!alive[i]) return;
-      deg[e.u]++;
-      deg[e.v]++;
-    });
-    let changed = false;
-    edges.forEach((e, i) => {
-      if (alive[i] && (deg[e.u] < 2 || deg[e.v] < 2)) {
-        alive[i] = false;
-        changed = true;
-      }
-    });
-    if (!changed) break;
-  }
+  // Köprü kenarları at: düzlemsel grafta iki yanında aynı yüz olan kenar ancak köprüdür (açık uçlu zincirler,
+  // ya da DXF'te dış konturu içteki bir döngüye bağlayan kısa çizgi). Bunlar alan sınırlamaz; kalırsa döngü
+  // aynı kenardan iki kez geçer ve çekirdekte geçersiz (kendine değen) yüz oluşur.
+  const bridges = bridgeEdges(nodes.length, edges);
+  const alive = edges.map((_, i) => !bridges.has(i));
 
   // Yarım kenarlar
   const he: HalfEdge[] = [];
@@ -371,15 +395,19 @@ export function findRegions(entities: SkEntity[]): Region[] {
   // Yüz izleme: e(u→v) sonrası, v'de twin(e)'den hemen önceki (saat yönünde bir sonraki) kenar
   const comp = new Array(nodes.length).fill(-1);
   const faceLoops: { loop: Loop; comp: number }[] = [];
+  /** yarım kenar → izlendiği yüz yürüyüşü (faceLoops indeksi) */
+  const faceOfHe = new Array(he.length).fill(-1);
   for (let start = 0; start < he.length; start++) {
     if (he[start].used) continue;
     const segs: Seg[] = [];
+    const hs: number[] = [];
     let h = start;
     let guard = 0;
     let ok = true;
     while (!he[h].used) {
       he[h].used = true;
       segs.push(he[h].seg);
+      hs.push(h);
       const v = he[h].to;
       const list = out[v];
       const k = posInOut.get(he[h].twin)!;
@@ -390,6 +418,7 @@ export function findRegions(entities: SkEntity[]): Region[] {
       }
     }
     if (!ok || h !== start || segs.length < 1) continue;
+    for (const x of hs) faceOfHe[x] = faceLoops.length;
     faceLoops.push({ loop: { segs, area: loopArea(segs) }, comp: -1 });
   }
 
@@ -404,9 +433,45 @@ export function findRegions(entities: SkEntity[]): Region[] {
     return comp[nodeOf(s.a)];
   };
 
+  // Bileşen içi seviye: her çizgi bir yanda dolu, öbür yanda boş ayırır. Bileşenin dış sınırına komşu yüz
+  // seviye 1 (dolu), ona komşu (dışarıya değmeyen) yüz seviye 2 (boş: aynı çizimle kapanan cep/odacık)...
+  const tolA = tol * tol;
+  const level = new Array(faceLoops.length).fill(-1);
+  const adj: Set<number>[] = faceLoops.map(() => new Set());
+  he.forEach((x, i) => {
+    const f = faceOfHe[i];
+    const g = faceOfHe[x.twin];
+    if (f >= 0 && g >= 0 && f !== g) {
+      adj[f].add(g);
+      adj[g].add(f);
+    }
+  });
+  const queue: number[] = [];
+  faceLoops.forEach((fl, i) => {
+    if (fl.loop.area < -tolA) {
+      level[i] = 0;
+      queue.push(i);
+    }
+  });
+  for (let qi = 0; qi < queue.length; qi++) {
+    const f = queue[qi];
+    for (const g of adj[f])
+      if (level[g] < 0) {
+        level[g] = level[f] + 1;
+        queue.push(g);
+      }
+  }
+
   // Bileşen kimlikleri: graf bileşenleri + her daire ayrı bileşen
+  interface CompFace {
+    loop: Loop;
+    /** bileşen içi seviye (1 = dış sınıra komşu) */
+    level: number;
+    /** kendine değen yürüyüşten ayrılan iç döngüler (bu yüzün delikleri) */
+    holes: Loop[];
+  }
   interface Comp {
-    faces: Loop[];
+    faces: CompFace[];
     /** dış sınır (ccw'ye çevrilmiş) */
     boundary: Loop | null;
     /** sınır üzerinde nokta */
@@ -415,30 +480,43 @@ export function findRegions(entities: SkEntity[]): Region[] {
     parentFace: number;
   }
   const comps = new Map<number | string, Comp>();
-  for (const fl of faceLoops) {
+  faceLoops.forEach((fl, fi) => {
     const id = loopComp(fl.loop);
     let c = comps.get(id);
     if (!c) {
       c = { faces: [], boundary: null, probe: loopPoint(fl.loop), depth: 0, parentFace: -1 };
       comps.set(id, c);
     }
-    const tolA = tol * tol;
-    if (fl.loop.area > tolA) c.faces.push(fl.loop);
-    else if (fl.loop.area < -tolA) {
+    if (fl.loop.area > tolA) {
+      // Kendine değen yürüyüş (yüz, aynı çizimle kapanan bir iç cebi çevreliyor): tekrar eden köşelerden
+      // basit döngülere böl; pozitifler ayrı yüz, negatifler en küçük içeren pozitif döngünün deliği
+      const parts = splitWalk(fl.loop.segs).map((sg) => ({ segs: sg, area: loopArea(sg) })).filter((l) => Math.abs(l.area) > tolA);
+      const outers = parts.filter((l) => l.area > 0);
+      const inners = parts.filter((l) => l.area < 0);
+      const lv = level[fi] > 0 ? level[fi] : 1;
+      const made: CompFace[] = outers.map((o) => ({ loop: o, level: lv, holes: [] }));
+      for (const h of inners) {
+        const pt = loopPoint(h);
+        let best: CompFace | null = null;
+        for (const m of made) if (loopContains(m.loop, pt) && (!best || m.loop.area < best.loop.area)) best = m;
+        if (best) best.holes.push(h);
+      }
+      c.faces.push(...made);
+    } else if (fl.loop.area < -tolA) {
       // Dış sınır: en büyük negatif alanlı döngü
       if (!c.boundary || -fl.loop.area > c.boundary.area) c.boundary = reverseLoop(fl.loop);
     }
-  }
+  });
   circleLoops.forEach((l, i) => {
-    comps.set(`c${i}`, { faces: [l], boundary: l, probe: loopPoint(l), depth: 0, parentFace: -1 });
+    comps.set(`c${i}`, { faces: [{ loop: l, level: 1, holes: [] }], boundary: l, probe: loopPoint(l), depth: 0, parentFace: -1 });
   });
 
   // Tüm sınırlı yüzler
-  const faces: { loop: Loop; comp: Comp; depth: number; holes: Loop[] }[] = [];
+  const faces: { loop: Loop; comp: Comp; level: number; depth: number; holes: Loop[] }[] = [];
   const compList = [...comps.values()].filter((c) => c.faces.length && c.boundary);
-  for (const c of compList) for (const f of c.faces) faces.push({ loop: f, comp: c, depth: 0, holes: [] });
+  for (const c of compList) for (const f of c.faces) faces.push({ loop: f.loop, comp: c, level: f.level, depth: 0, holes: [...f.holes] });
 
-  // Derinlik: bileşen noktasını içeren (başka bileşenlerin) yüz sayısı; ebeveyn = en derin içeren yüz
+  // Derinlik: bileşen noktasını içeren (başka bileşenlerin) yüz sayısı; ebeveyn = en küçük içeren yüz
   for (const c of compList) {
     const containing: number[] = [];
     faces.forEach((f, fi) => {
@@ -454,7 +532,8 @@ export function findRegions(entities: SkEntity[]): Region[] {
       }
     }
   }
-  for (const f of faces) f.depth = f.comp.depth;
+  // Yüz derinliği = bileşenin derinliği + bileşen içi seviye − 1 (çift = dolu)
+  for (const f of faces) f.depth = f.comp.depth + f.level - 1;
   for (const c of compList) if (c.parentFace >= 0) faces[c.parentFace].holes.push(reverseLoop(c.boundary!));
 
   return faces.map((f) => {
@@ -463,9 +542,37 @@ export function findRegions(entities: SkEntity[]): Region[] {
   });
 }
 
-/** profilePoints'e göre bölge seçimi (boş → çift derinlikli tüm bölgeler) */
+/**
+ * Kapalı yürüyüşü tekrar eden köşelerden basit döngülere ayırır (köşeler düğüm nesnesi kimliğiyle eşlenir:
+ * findRegions parçalarında a/b aynı düğüm dizisinin öğeleridir).
+ */
+function splitWalk(segs: Seg[]): Seg[][] {
+  const out: Seg[][] = [];
+  const path: Seg[] = [];
+  const at = new Map<Vec2, number>();
+  for (const s of segs) {
+    if (s.kind === 'circle') return [segs];
+    if (!at.has(s.a)) at.set(s.a, path.length);
+    path.push(s);
+    const p = at.get(s.b);
+    if (p !== undefined) {
+      out.push(path.splice(p));
+      for (const [k, idx] of at) if (idx >= p) at.delete(k);
+    }
+  }
+  if (path.length) out.push(path);
+  return out;
+}
+
+/**
+ * Kıl payı bölge: alanı çok küçük (mm²). DXF çizimlerinde yaya neredeyse teğet kısa çizgi gibi çizim
+ * artıkları 1e-5 mm² mertebesinde bölge oluşturur; otomatik seçime alınmaz.
+ */
+export const SLIVER_AREA = 1e-3;
+
+/** profilePoints'e göre bölge seçimi (boş → çift derinlikli tüm bölgeler, kıl payları hariç) */
 export function selectRegions(regions: Region[], profilePoints: Vec2[]): Region[] {
-  if (!profilePoints.length) return regions.filter((r) => r.depth % 2 === 0);
+  if (!profilePoints.length) return regions.filter((r) => r.depth % 2 === 0 && r.area > SLIVER_AREA);
   const out: Region[] = [];
   for (const p of profilePoints) {
     let best: Region | null = null;
