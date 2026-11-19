@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { composeT, invertT } from '../../lib/math';
 import { objectRegistry } from '../../lib/registry';
 import { applyWorldDelta, rigidSetOf, selectedPartIds } from '../../lib/rigid';
-import { useAssembly, type AssemblyState } from '../../store/useAssembly';
+import { toastFixedMove, useAssembly, type AssemblyState } from '../../store/useAssembly';
 import type { Doc, Transform } from '../../types';
 import { markGizmoDown, markGizmoUp, sceneRefs } from './sceneRefs';
 import { lockedPartIds } from '../../modeling/refLocks';
@@ -79,6 +79,8 @@ export function Gizmo() {
     return o;
   });
   const drag = useRef<RigidDrag | null>(null);
+  /** Sürükleme sabit parça içeriyor: nesne her harekette belgedeki yerine geri konur */
+  const blocked = useRef(false);
 
   // Sürükleme yokken proxy pivotu izler (seçim, geri alma, çözücü düzeltmeleri)
   useLayoutEffect(() => {
@@ -103,15 +105,27 @@ export function Gizmo() {
     const st = useAssembly.getState();
     const r = rigidSetOf(st.doc, st.selection, st.extraSel);
     drag.current = r ? { start: transformOf(proxy), partIds: r.partIds } : null;
+    blocked.current = !!st.selection && selectedPartIds(st.doc, st.selection, st.extraSel).some((id) => st.doc.parts.find((p) => p.id === id)?.fixed === true);
+    if (blocked.current) toastFixedMove();
     st.beginDrag();
   }, [proxy]);
 
   const onObjectChange = useCallback(() => {
     const st = useAssembly.getState();
     const d = drag.current;
+    if (blocked.current) {
+      // Sabit parça: gizmo nesneyi oynatsa da belgedeki yerine geri konur
+      if (d) placeAt(proxy, d.start);
+      else if (target && st.selection) {
+        const sel = st.selection;
+        const t = sel.kind === 'instance' ? st.doc.instances.find((i) => i.id === sel.id) : st.doc.parts.find((p) => p.id === sel.id);
+        if (t) placeAt(target, t);
+      }
+      return;
+    }
     if (d) {
       const delta = composeT(transformOf(proxy), invertT(d.start));
-      st.updateLive((base) => applyWorldDelta(base, d.partIds, delta));
+      st.updateLive((base) => applyWorldDelta(base, d.partIds, delta), d.partIds);
       return;
     }
     const sel = st.selection;
@@ -125,6 +139,7 @@ export function Gizmo() {
     markGizmoUp();
     const wasRigid = drag.current !== null;
     drag.current = null;
+    blocked.current = false;
     const st = useAssembly.getState();
     st.endDrag();
     if (wasRigid) {

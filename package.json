@@ -7,7 +7,8 @@
     "postinstall": "node scripts/copy-occt.mjs",
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:mates": "node scripts/run-ts.mjs scripts/mate-tests.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",

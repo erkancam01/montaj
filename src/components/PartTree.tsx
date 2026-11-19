@@ -9,6 +9,7 @@ import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from './Gro
 import { IconChevron, IconEye, IconEyeOff, IconLink } from './icons';
 import { MateList } from './MateList';
 import { FeatureTree } from './modeling/FeatureTree';
+import { usePartStatusMark } from '../lib/partStatus';
 
 /** Parçaları otomatik kapalı başlatma eşiği */
 const COLLAPSE_THRESHOLD = 40;
@@ -225,6 +226,7 @@ const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; paren
     }),
   );
   const rowRef = useScrollIntoView(info.selected);
+  const mark = usePartStatusMark(id);
 
   const node = info.ready ? geometryCache.get(info.fileId)?.nodes[info.nodeKey] : undefined;
   const title = node && node.path.length ? [...node.path, node.name].join(' / ') : info.name;
@@ -257,6 +259,7 @@ const PartRow = memo(function PartRow({ id, parentVisible }: { id: string; paren
         aria-hidden="true"
       />
       <span className="tree-name" title={title}>
+        {mark && <span className="tree-dof">{mark} </span>}
         {info.name}
       </span>
       {info.groupId && (

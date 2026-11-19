@@ -6,6 +6,17 @@ import { getFaceGeom, worldFaceGeom } from './faceGeometry';
 import { partLocalFromWorld } from './math';
 import { lockedPartIds } from '../modeling/refLocks';
 
+export interface SolveOptions {
+  /**
+   * Fareyle / gizmoyla tutulan (sürüklenen) parçalar. Tutulan gövde mate yönlendirmesinde sabitlerden sonra
+   * önceliklidir: sabite bağlı değilse ona bağlı serbest gövdeler onu izler; sabite bağlıysa yalnız kendisi
+   * kısıt manifolduna izdüşer (en küçük düzeltme).
+   */
+  held?: Iterable<string>;
+  /** Yüzey geometrisi çözümleyicisi (test için); varsayılan getFaceGeom */
+  geomOf?: (part: Part, meshIndex: number, faceIndex: number) => FaceGeom | null;
+}
+
 export interface SolveResult {
   /** Değişiklik yoksa `next` ile AYNI nesne döner */
   doc: Doc;
@@ -31,6 +42,18 @@ const MSG_SELF = 'Aynı parçanın iki yüzeyi arasında mate kurulamaz';
 const MSG_LOCKED = 'Hareketli parça başka bir parçaya bağlı (canlı referans); mate yönünü değiştirin ya da bağlantıyı koparın';
 const MSG_KIND = 'Bu yüzeyler bu mate tipi için uygun değil';
 const MSG_SAME_BODY = 'Aynı rijit gruptaki parçalar arasında mate kurulamaz';
+const MSG_BOTH_FIXED = 'İki sabit parça arasında sağlanmıyor (parçalardan birini serbest bırakın)';
+
+/** Parça sabit mi (Part.fixed) */
+export const partIsFixed = (p: Part | undefined): boolean => !!p && p.fixed === true;
+
+/**
+ * Mate'in a/b tarafları değiştirilmiş eşdeğeri (aynı geometrik kısıt):
+ * coincident flip=true'da (n_b = +n_a) ofset işaret değiştirir; diğer tiplerde kısıt simetriktir.
+ */
+export function swapMate(m: Mate): Mate {
+  return { ...m, a: m.b, b: m.a, offset: m.type === 'coincident' && m.flip ? -m.offset : m.offset };
+}
 
 /** Parçanın / gövdenin dünya dönüşümü (değişken) */
 interface Pose {
@@ -53,6 +76,8 @@ interface Body {
   base: Pose;
   /** Bu çözümdeki güncel poz (çözülünce güncellenir) */
   cur: Pose;
+  /** Üyelerinden biri sabit: çözücü bu gövdeyi hiç taşımaz */
+  fixed: boolean;
 }
 
 /** Çözülecek (etkin) mate ve GÖVDE-yerel yüzey geometrileri */
@@ -273,7 +298,7 @@ function geomCompatible(type: Mate['type'], a: FaceGeom, b: FaceGeom): boolean {
  * deltasıyla) taşınır, değilse yalnızca b parçası. Yalnızca b gövdelerinin üyelerinin Part.position/quaternion'u değişir.
  * Grup çerçevesi anchor'a bağlı olduğundan ayrıca güncellenmez.
  */
-export function solveMates(prev: Doc, next: Doc): SolveResult {
+export function solveMates(prev: Doc, next: Doc, opts: SolveOptions = {}): SolveResult {
   const status: Record<string, MateStatus> = {};
   if (!next.mates.length) return { doc: next, status };
 
@@ -282,6 +307,7 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
   const groups = next.groups ?? [];
   /** Canlı dış referanslı gövde parçaları mate'te hareketli taraf olamaz */
   const locked = lockedPartIds(next);
+  const geomOf = opts.geomOf ?? getFaceGeom;
 
   /** parça id → grubu (bir parça en fazla bir grupta; tutarsızlıkta ilk grup geçerli) */
   let groupOf: Map<string, Group> | null = null;
@@ -313,7 +339,7 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
     const g = groupOf?.get(partId) ?? null;
     if (!g) {
       const w = nextWorld(partId)!;
-      body = { id: bid, group: null, members: [partId], rel: null, base: w, cur: w };
+      body = { id: bid, group: null, members: [partId], rel: null, base: w, cur: w, fixed: partIsFixed(parts.get(partId)) };
     } else {
       const members: string[] = [];
       for (const id of g.partIds) if (nextWorld(id) && !members.includes(id)) members.push(id);
@@ -322,7 +348,8 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
       const pose = aw ? composePose(aw, poseOfT(g.frame)) : nextWorld(members[0])!;
       const rel = new Map<string, Pose>();
       for (const id of members) rel.set(id, relPose(pose, nextWorld(id)!));
-      body = { id: bid, group: g, members, rel, base: pose, cur: pose };
+      const fixed = g.partIds.some((id) => partIsFixed(parts.get(id)));
+      body = { id: bid, group: g, members, rel, base: pose, cur: pose, fixed };
     }
     bodies.set(bid, body);
     return body;
@@ -351,6 +378,17 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
     return false;
   };
 
+  /** Yönlendirilmemiş aday mate'ler (geçerlilik kontrollerinden geçenler) */
+  interface Cand {
+    m: Mate;
+    pa: Part;
+    pb: Part;
+    ga: FaceGeom;
+    gb: FaceGeom;
+    aId: string;
+    bId: string;
+  }
+  const cands: Cand[] = [];
   for (const m of next.mates) {
     if (m.suppressed) {
       status[m.id] = { state: 'suppressed' };
@@ -362,8 +400,8 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
       status[m.id] = { state: 'pending' };
       continue;
     }
-    const ga = getFaceGeom(pa, m.a.meshIndex, m.a.faceIndex);
-    const gb = getFaceGeom(pb, m.b.meshIndex, m.b.faceIndex);
+    const ga = geomOf(pa, m.a.meshIndex, m.a.faceIndex);
+    const gb = geomOf(pb, m.b.meshIndex, m.b.faceIndex);
     if (!ga || !gb) {
       status[m.id] = { state: 'pending' };
       continue;
@@ -382,7 +420,77 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
       status[m.id] = { state: 'error', message: MSG_KIND };
       continue;
     }
-    if (locked.has(pb.id)) {
+    cands.push({ m, pa, pb, ga, gb, aId, bId });
+  }
+
+  // Yönlendirme (kim referans, kim hareketli):
+  // kökler = sabit ya da kilitli (canlı referanslı) gövdeler; köke mate-uzaklığı küçük olan referanstır.
+  // Kökü olmayan bileşende tutulan (sürüklenen) gövdeye uzaklık kullanılır. Eşitlikte tutulan gövde, sonra
+  // sabit gövde referanstır; o da yoksa kayıtlı a → b yönü korunur (eski projeler aynı sonucu verir).
+  const rootBodies = new Set<string>();
+  const lockedBodies = new Set<string>();
+  for (const p of next.parts) {
+    if (partIsFixed(p)) rootBodies.add(bodyIdOfPart(p.id));
+    if (locked.has(p.id)) {
+      lockedBodies.add(bodyIdOfPart(p.id));
+      rootBodies.add(bodyIdOfPart(p.id));
+    }
+  }
+  const heldBodies = new Set<string>();
+  for (const id of opts.held ?? []) if (parts.has(id)) heldBodies.add(bodyIdOfPart(id));
+  const adj = new Map<string, string[]>();
+  const link = (x: string, y: string) => {
+    const l = adj.get(x);
+    if (l) l.push(y);
+    else adj.set(x, [y]);
+  };
+  for (const c of cands) {
+    link(c.aId, c.bId);
+    link(c.bId, c.aId);
+  }
+  const bfs = (sources: Set<string>): Map<string, number> => {
+    const dist = new Map<string, number>();
+    const queue: string[] = [];
+    for (const s0 of sources) {
+      dist.set(s0, 0);
+      queue.push(s0);
+    }
+    for (let qi = 0; qi < queue.length; qi++) {
+      const x = queue[qi];
+      const d = dist.get(x)! + 1;
+      for (const y of adj.get(x) ?? []) {
+        if (!dist.has(y)) {
+          dist.set(y, d);
+          queue.push(y);
+        }
+      }
+    }
+    return dist;
+  };
+  const dRoot = bfs(rootBodies);
+  const dHeld = bfs(heldBodies);
+
+  for (const c of cands) {
+    let swap = false;
+    const ra = dRoot.get(c.aId) ?? Infinity;
+    const rb = dRoot.get(c.bId) ?? Infinity;
+    if (ra !== rb) swap = rb < ra;
+    else {
+      const ha = ra === Infinity ? (dHeld.get(c.aId) ?? Infinity) : Infinity;
+      const hb = ra === Infinity ? (dHeld.get(c.bId) ?? Infinity) : Infinity;
+      if (ha !== hb) swap = hb < ha;
+      else if (heldBodies.has(c.aId) !== heldBodies.has(c.bId)) swap = heldBodies.has(c.bId);
+      else if (ra === 0) swap = bodyOf(c.pb.id).fixed && !bodyOf(c.pa.id).fixed;
+    }
+    const m = swap ? swapMate(c.m) : c.m;
+    const pa = swap ? c.pb : c.pa;
+    const pb = swap ? c.pa : c.pb;
+    const ga = swap ? c.gb : c.ga;
+    const gb = swap ? c.ga : c.gb;
+    const aId = swap ? c.bId : c.aId;
+    const bId = swap ? c.aId : c.bId;
+    // Hareketli taraf kilitliyse (ve sabit değilse) mate çözülemez (iki kök arasındaki mate)
+    if (lockedBodies.has(bId) && !bodyOf(pb.id).fixed) {
       status[m.id] = { state: 'error', message: MSG_LOCKED };
       continue;
     }
@@ -466,6 +574,15 @@ export function solveMates(prev: Doc, next: Doc): SolveResult {
     const body = bodies.get(bid)!;
     const base = body.base;
     const pose: Pose = { p: base.p.clone(), q: base.q.clone() };
+
+    if (body.fixed) {
+      // Sabit gövde (iki sabit arasındaki mate): taşınmaz, yalnız durum hesaplanır
+      for (const am of mates) {
+        residual(am, am.ba.cur, pose, res);
+        status[am.mate.id] = res[0] <= OK_POS && res[1] <= OK_ANG ? { state: 'ok' } : { state: 'error', message: MSG_BOTH_FIXED };
+      }
+      continue;
+    }
 
     if (!directlyChanged(body)) {
       // Referans gövde bu çözümde hareket ettiyse rijit takip: P = ΔR · P_prev

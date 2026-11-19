@@ -5,6 +5,7 @@ import { useAssembly } from '../../store/useAssembly';
 import { CameraRig } from './CameraRig';
 import { FaceHighlights, MateCursor } from './FaceHighlights';
 import { Gizmo } from './Gizmo';
+import { DragController } from './DragController';
 import { Lights } from './Lights';
 import { SceneContent } from './SceneContent';
 import { SceneGrid } from './SceneGrid';
@@ -41,6 +42,7 @@ export function Viewport() {
       <FaceHighlights />
       <MateCursor />
       <Gizmo />
+      <DragController />
       <SketchLayer />
       <PickLayer />
       <CameraRig />

@@ -25,16 +25,48 @@ const MERGE_WINDOW_MS = 800;
 
 export const emptyDoc = (): Doc => ({ files: [], instances: [], parts: [], mates: [], groups: [], bodies: [] });
 
+/**
+ * Sabitlik varsayılanı: belgede hiçbir parçada `fixed` alanı yoksa (eski kayıt ya da montaja ilk ekleme)
+ * ilk instance'ın parçaları sabitlenir. Kullanıcı tümünü serbest bıraktıysa (fixed: false) dokunulmaz.
+ */
+export function withDefaultFixed(doc: Doc): Doc {
+  const first = doc.instances[0];
+  if (!first || doc.parts.some((p) => p.fixed !== undefined)) return doc;
+  if (!doc.parts.some((p) => p.instanceId === first.id)) return doc;
+  return { ...doc, parts: doc.parts.map((p) => (p.instanceId === first.id ? { ...p, fixed: true } : p)) };
+}
+
 /** Eski kayıtları güncel şemaya tamamlar */
 export const normalizeDoc = (doc: Doc): Doc =>
-  Array.isArray(doc.mates) && Array.isArray(doc.groups) && Array.isArray(doc.bodies)
-    ? doc
-    : {
-        ...doc,
-        mates: Array.isArray(doc.mates) ? doc.mates : [],
-        groups: Array.isArray(doc.groups) ? doc.groups : [],
-        bodies: Array.isArray(doc.bodies) ? doc.bodies : [],
-      };
+  withDefaultFixed(
+    Array.isArray(doc.mates) && Array.isArray(doc.groups) && Array.isArray(doc.bodies)
+      ? doc
+      : {
+          ...doc,
+          mates: Array.isArray(doc.mates) ? doc.mates : [],
+          groups: Array.isArray(doc.groups) ? doc.groups : [],
+          bodies: Array.isArray(doc.bodies) ? doc.bodies : [],
+        },
+  );
+
+/**
+ * Commit sonrası sabitlik: montaja ilk parçalar eklenince varsayılan sabitlik; kopyalanan (yeni id'li)
+ * parçalar sabitliği devralmaz.
+ */
+function fixDefaults(prev: Doc, next: Doc): Doc {
+  if (!prev.parts.length) return withDefaultFixed(next);
+  if (next.parts === prev.parts) return next;
+  const old = new Set(prev.parts.map((p) => p.id));
+  let changed = false;
+  const parts = next.parts.map((p) => {
+    if (old.has(p.id) || p.fixed === undefined) return p;
+    changed = true;
+    const { fixed: _f, ...rest } = p;
+    void _f;
+    return rest;
+  });
+  return changed ? { ...next, parts } : next;
+}
 
 /** Instance'ı kalmayan gövdeleri atar (gövdenin son örneği silinince gövde de gider; geri alınabilir) */
 function pruneBodies(doc: Doc): Doc {
@@ -103,7 +135,9 @@ export interface AssemblyState {
    * doc = çöz(fn(başlangıç)). Rijit küme sürüklemede kullanılır (rigid.applyWorldDelta).
    * Sürükleme yoksa mevcut belgeden türetir (geçmişe yazmaz).
    */
-  updateLive(fn: (base: Doc) => Doc): void;
+  updateLive(fn: (base: Doc) => Doc, held?: string[]): void;
+  /** Sürüklemenin başlangıç belgesi (sürükleme yoksa null) */
+  dragBase(): Doc | null;
   endDrag(): void;
   undo(): void;
   redo(): void;
@@ -199,12 +233,76 @@ function enforceLocks(prev: Doc, next: Doc): Doc {
   return { ...next, parts, instances };
 }
 
-/** Mate'leri çözer; mate yoksa belgeyi olduğu gibi döndürür */
-function solve(prev: Doc, nextIn: Doc): { doc: Doc; mateStatus: Record<string, MateStatus> } {
-  const next = enforceLocks(prev, nextIn);
+let fixedToastAt = 0;
+export const MSG_FIXED_MOVE = 'Bu parça sabit; taşımak için önce "Serbest bırak" ile sabitliği kaldırın.';
+
+/** Sabit parça taşınma girişiminde (gizmo, sürükleme) kısıtlı aralıkla bilgi mesajı */
+export function toastFixedMove() {
+  const now = Date.now();
+  if (now - fixedToastAt < 3000) return;
+  fixedToastAt = now;
+  queueMicrotask(() => useAssembly.getState().showToast(MSG_FIXED_MOVE));
+}
+
+const near = (a: readonly number[], b: readonly number[]) => a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+
+/**
+ * Sabit parçalar doğrudan taşınamaz (gizmo, sayısal giriş, sıfırla, instance taşıma): dünya konumu değişen
+ * sabit parçanın kendisi, instance'ı ve (gruptaysa) tüm grup üyeleri önceki dönüşüme geri döner.
+ */
+function enforceFixed(prev: Doc, next: Doc): Doc {
+  if (next.parts === prev.parts && next.instances === prev.instances) return next;
+  const fixedIds = next.parts.filter((p) => p.fixed === true).map((p) => p.id);
+  if (!fixedIds.length) return next;
+  const prevParts = new Map(prev.parts.map((p) => [p.id, p]));
+  const prevInsts = new Map(prev.instances.map((i) => [i.id, i]));
+  const nextParts = new Map(next.parts.map((p) => [p.id, p]));
+  const nextInsts = new Map(next.instances.map((i) => [i.id, i]));
+  const revertParts = new Set<string>();
+  const revertInsts = new Set<string>();
+  for (const id of fixedIds) {
+    const pn = nextParts.get(id)!;
+    const pp = prevParts.get(id);
+    const inn = nextInsts.get(pn.instanceId);
+    const ip = pp && prevInsts.get(pp.instanceId);
+    if (!pp || !inn || !ip || inn.id !== ip.id) continue;
+    const instMoved = !near(inn.position, ip.position) || !near(inn.quaternion, ip.quaternion);
+    const partMoved = !near(pn.position, pp.position) || !near(pn.quaternion, pp.quaternion);
+    if (!instMoved && !partMoved) continue;
+    if (instMoved) revertInsts.add(inn.id);
+    const g = next.groups.find((x) => x.partIds.includes(id));
+    for (const m of g ? g.partIds : [id]) revertParts.add(m);
+  }
+  if (!revertParts.size && !revertInsts.size) return next;
+  toastFixedMove();
+  return {
+    ...next,
+    parts: next.parts.map((p) => {
+      const pp = revertParts.has(p.id) ? prevParts.get(p.id) : undefined;
+      return pp && pp.instanceId === p.instanceId ? { ...p, position: pp.position, quaternion: pp.quaternion } : p;
+    }),
+    instances: revertInsts.size
+      ? next.instances.map((i) => {
+          const ip = revertInsts.has(i.id) ? prevInsts.get(i.id) : undefined;
+          return ip ? { ...i, position: ip.position, quaternion: ip.quaternion } : i;
+        })
+      : next.instances,
+  };
+}
+
+/**
+ * Mate'leri çözer; mate yoksa belgeyi olduğu gibi döndürür. held = fareyle/gizmoyla tutulan parçalar
+ * (çözücüde sabitlerden sonra öncelikli).
+ */
+export function solve(
+  prev: Doc,
+  nextIn: Doc,
+  held?: Iterable<string>,
+): { doc: Doc; mateStatus: Record<string, MateStatus> } {
+  const next = enforceFixed(prev, enforceLocks(prev, nextIn));
   if (!next.mates.length) return { doc: next, mateStatus: {} };
   try {
-    const r = solveMates(prev, next);
+    const r = solveMates(prev, next, { held });
     return { doc: r.doc, mateStatus: r.status };
   } catch (e) {
     console.error('Mate çözücü hatası', e);
@@ -265,7 +363,7 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
     const prev = get().doc;
     const raw = fn(prev);
     if (raw === prev) return;
-    const changed = pruneBodies(cleanupGroups(prev, raw));
+    const changed = fixDefaults(prev, pruneBodies(cleanupGroups(prev, raw)));
     const { doc: next, mateStatus } = solve(prev, changed);
     const now = Date.now();
     const merge = !!mergeKey && lastMerge?.key === mergeKey && now - lastMerge.time < MERGE_WINDOW_MS;
@@ -307,17 +405,20 @@ export const useAssembly = create<AssemblyState>()((set, get) => ({
   },
   setTransformLive: (kind, id, position, quaternion) =>
     set((s) => {
-      const { doc, mateStatus } = solve(s.doc, applyTransform(s.doc, kind, id, position, quaternion));
+      // Gizmoyla tutulan nesne çözücüde önceliklidir (ona bağlı serbest parçalar onu izler)
+      const held = kind === 'part' ? [id] : s.doc.parts.filter((p) => p.instanceId === id).map((p) => p.id);
+      const { doc, mateStatus } = solve(s.doc, applyTransform(s.doc, kind, id, position, quaternion), held);
       return { doc, mateStatus };
     }),
-  updateLive: (fn) =>
+  updateLive: (fn, held) =>
     set((s) => {
       const base = dragSnapshot ?? s.doc;
       // prev = başlangıç belgesi: sürüklenen gövde doğrudan değişmiş sayılır, ona bağlı gövdeler
       // başlangıç pozlarından rijit takip eder (prev = son kare olsaydı takip kaybolurdu)
-      const { doc, mateStatus } = solve(base, fn(base));
+      const { doc, mateStatus } = solve(base, fn(base), held);
       return { doc, mateStatus };
     }),
+  dragBase: () => dragSnapshot,
   endDrag: () => {
     const snap = dragSnapshot;
     dragSnapshot = null;
