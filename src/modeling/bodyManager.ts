@@ -3,13 +3,13 @@
 // yeni geometriye yeniden eşler. App açılışında startBodyManager() bir kez çağrılır.
 import { BufferAttribute, BufferGeometry } from 'three';
 import { buildBody, type BodyMesh } from '../kernel/kernelApi';
-import { getFaceGeom } from '../lib/faceGeometry';
 import { geometryCache, type ParsedFile, type ParsedMesh } from '../lib/geometryCache';
 import { afterRender } from '../lib/viewerApi';
 import { useAssembly } from '../store/useAssembly';
 import type { Body, Doc, FaceRef, Feature, Mate, Vec3 } from '../types';
 import { bodyFileId, isBodyFileId, bodyIdOfFile } from '../types';
-import { faceArea, matchFace } from './faceMatch';
+import { applyFaceMatch, faceArea, faceRefSig, matchFace, matchFaceRef } from './faceMatch';
+import { computeAndCacheOrigins, dropOrigins } from './faceOrigin';
 import { resolveBody, sourcesKey } from './externalRefs';
 import { liveSourcesOf } from './refLocks';
 import { initSketchSolver, isSketchSolverReady } from '../sketch/solver';
@@ -76,7 +76,10 @@ function disposeFile(f: ParsedFile | undefined) {
 
 // ---------------------------------------------------------------- Yüz referansı yeniden eşleme
 
-/** Gövde parçalarına ait mate referanslarını imzalarına göre günceller (geçmişe yazmadan) */
+/**
+ * Gövde parçalarına ait mate referanslarını yeniden eşler (geçmişe yazmadan): önce yüz kökeni (özellik +
+ * sketch eğrisi), sonra imza (sig + alan).
+ */
 function remapMates(bodyId: string) {
   const s = st();
   const fid = bodyFileId(bodyId);
@@ -85,14 +88,13 @@ function remapMates(bodyId: string) {
   let changed = false;
   const fix = (ref: FaceRef): FaceRef => {
     const part = partOf.get(ref.partId);
-    if (!part || !ref.sig) return ref;
-    const m = matchFace(part, ref.sig, ref.sigArea);
+    if (!part || (!ref.sig && !ref.origin)) return ref;
+    const m = matchFaceRef(part, ref);
     if (!m) return ref;
-    const same = m.meshIndex === ref.meshIndex && m.faceIndex === ref.faceIndex && JSON.stringify(m.geom) === JSON.stringify(ref.sig);
-    if (same) return ref;
-    changed = true;
     // İmza da güncellenir: sonraki parametrik değişiklik yeni konumdan izlenir
-    return { ...ref, meshIndex: m.meshIndex, faceIndex: m.faceIndex, sig: m.geom, sigArea: m.area };
+    const next = applyFaceMatch(ref, m);
+    if (next !== ref) changed = true;
+    return next;
   };
   const mates: Mate[] = s.doc.mates.map((m) => {
     const a = fix(m.a);
@@ -131,6 +133,8 @@ function schedule(body: Body) {
       geometryCache.set(fid, file);
       built.set(body.id, { key, file });
       const errs = res.featureErrors;
+      // Yüz kökenleri (topolojik adlar): mate/projeksiyon yeniden eşlemesinden önce
+      computeAndCacheOrigins(fid, features, errs);
       const nErr = Object.keys(errs).length;
       st().setBuildStatus(body.id, {
         state: nErr ? 'error' : 'ok',
@@ -207,6 +211,7 @@ function reconcile() {
       inflight.delete(id);
       const fid = bodyFileId(id);
       const f = geometryCache.get(fid);
+      dropOrigins(fid);
       if (f) {
         geometryCache.delete(fid);
         afterRender(() => disposeFile(f));
@@ -244,12 +249,11 @@ export function startBodyManager() {
   reconcile();
 }
 
-/** Parça bir gövdeye aitse yüz referansına imza ekler (mate kurarken) */
+/** Parça bir gövdeye aitse yüz referansına imza ve köken ekler (mate kurarken) */
 export function withFaceSig(ref: FaceRef): FaceRef {
   const part = st().doc.parts.find((p) => p.id === ref.partId);
   if (!part || !isBodyFileId(part.fileId)) return ref;
-  const g = getFaceGeom(part, ref.meshIndex, ref.faceIndex);
-  return g && g.kind !== 'other' ? { ...ref, sig: g, sigArea: faceArea(part, ref.meshIndex, ref.faceIndex) } : ref;
+  return faceRefSig(part, ref);
 }
 
 export { bodyIdOfFile };

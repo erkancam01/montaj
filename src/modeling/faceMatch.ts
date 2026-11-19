@@ -1,7 +1,8 @@
 // Gövde yüzlerinin imzayla yeniden eşlenmesi (parametrik değişiklik sonrası aynı yüzü bulmak için).
 import { getFaceGeom } from '../lib/faceGeometry';
 import { geometryCache } from '../lib/geometryCache';
-import type { FaceGeom, Part, Vec3 } from '../types';
+import type { FaceGeom, FaceOrigin, FaceRef, Part, Vec3 } from '../types';
+import { originCandidates, originsOf } from './faceOrigin';
 
 const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -30,39 +31,106 @@ export function faceArea(part: Pick<Part, 'fileId' | 'nodeKey'>, meshIndex: numb
   return a;
 }
 
+/**
+ * sig'e göre aday yüzün puanı (küçük = iyi; null = uyumsuz: farklı tür/yön). diag: parça köşegeni (alan
+ * uyumsuzluğu bir parça boyu kaymaya denk cezalandırılır). Saf fonksiyon.
+ */
+export function faceScore(sig: FaceGeom, sigArea: number | undefined, g: FaceGeom, area: number, diag: number): number | null {
+  let score: number;
+  if (g.kind === 'plane' && sig.kind === 'plane') {
+    if (dot(g.normal, sig.normal) < 0.999) return null;
+    const off = Math.abs(dot(sub(g.point, sig.point), sig.normal));
+    // düzlem kayması önce, sonra yüz merkezinin yakınlığı
+    score = off * 10 + len(sub(g.point, sig.point));
+  } else if (g.kind === 'cylinder' && sig.kind === 'cylinder') {
+    if (Math.abs(Math.abs(dot(g.axis, sig.axis)) - 1) > 1e-3) return null;
+    const v = sub(g.point, sig.point);
+    const along = dot(v, sig.axis);
+    const perp = len([v[0] - along * sig.axis[0], v[1] - along * sig.axis[1], v[2] - along * sig.axis[2]]);
+    score = perp * 10 + Math.abs(along) + Math.abs(g.radius - sig.radius) * 20;
+  } else return null;
+  if (sigArea && sigArea > 0 && area > 0) score += Math.abs(Math.log(area / sigArea)) * diag;
+  return score;
+}
+
+export interface FaceMatch {
+  meshIndex: number;
+  faceIndex: number;
+  geom: FaceGeom;
+  area: number;
+}
+
 export function matchFace(
   part: Pick<Part, 'fileId' | 'nodeKey'>,
   sig: FaceGeom,
   sigArea?: number,
-): { meshIndex: number; faceIndex: number; geom: FaceGeom; area: number } | null {
+  /** Yalnız bu yüzler arasında ara */
+  only?: { meshIndex: number; faceIndex: number }[],
+): FaceMatch | null {
   const node = geometryCache.get(part.fileId)?.nodes[part.nodeKey];
   if (!node || sig.kind === 'other') return null;
-  // Alan uyumsuzluğu, parçanın bir boyu kadar kaymaya denk cezalandırılır
   const diag = Math.max(1, Math.hypot(...node.size));
-  const areaPenalty = (a: number) => (sigArea && sigArea > 0 && a > 0 ? Math.abs(Math.log(a / sigArea)) * diag : 0);
-  let best = null as { meshIndex: number; faceIndex: number; geom: FaceGeom; score: number; area: number } | null;
-  node.meshes.forEach((m, mi) => {
-    for (let fi = 0; fi < m.faces.length; fi++) {
-      const g = getFaceGeom(part, mi, fi);
-      if (!g || g.kind !== sig.kind) continue;
-      let score: number;
-      if (g.kind === 'plane' && sig.kind === 'plane') {
-        if (dot(g.normal, sig.normal) < 0.999) continue;
-        const off = Math.abs(dot(sub(g.point, sig.point), sig.normal));
-        // düzlem kayması önce, sonra yüz merkezinin yakınlığı
-        score = off * 10 + len(sub(g.point, sig.point));
-      } else if (g.kind === 'cylinder' && sig.kind === 'cylinder') {
-        if (Math.abs(Math.abs(dot(g.axis, sig.axis)) - 1) > 1e-3) continue;
-        const v = sub(g.point, sig.point);
-        const along = dot(v, sig.axis);
-        const perp = len([v[0] - along * sig.axis[0], v[1] - along * sig.axis[1], v[2] - along * sig.axis[2]]);
-        score = perp * 10 + Math.abs(along) + Math.abs(g.radius - sig.radius) * 20;
-      } else continue;
-      const area = faceArea(part, mi, fi);
-      score += areaPenalty(area);
-      if (!best || score < best.score) best = { meshIndex: mi, faceIndex: fi, geom: g, score, area };
-    }
-  });
+  const list = only ?? node.meshes.flatMap((m, mi) => m.faces.map((_, fi) => ({ meshIndex: mi, faceIndex: fi })));
+  let best = null as (FaceMatch & { score: number }) | null;
+  for (const { meshIndex: mi, faceIndex: fi } of list) {
+    const g = getFaceGeom(part, mi, fi);
+    if (!g || g.kind !== sig.kind) continue;
+    const area = faceArea(part, mi, fi);
+    const score = faceScore(sig, sigArea, g, area, diag);
+    if (score === null) continue;
+    if (!best || score < best.score) best = { meshIndex: mi, faceIndex: fi, geom: g, score, area };
+  }
   return best ? { meshIndex: best.meshIndex, faceIndex: best.faceIndex, geom: best.geom, area: best.area } : null;
+}
+
+/**
+ * Gövde yüz referansını güncel geometride bulur: önce aynı kökenli yüzler (tek aday → o; birden çok →
+ * imza+alan yakınlığı), köken yoksa/bulunamazsa imzayla en yakın yüz. origin: yeni referansa yazılacak köken
+ * (eski köken bulunamadıysa korunur — özellik geri gelince yeniden bağlanır).
+ */
+export function matchFaceRef(part: Pick<Part, 'fileId' | 'nodeKey'>, ref: FaceRef): (FaceMatch & { origin?: FaceOrigin }) | null {
+  const origins = originsOf(part.fileId);
+  if (ref.origin && origins) {
+    const cands = originCandidates(origins, ref.origin);
+    if (cands.length) {
+      let m: FaceMatch | null = null;
+      if (cands.length > 1 && ref.sig && ref.sig.kind !== 'other') m = matchFace(part, ref.sig, ref.sigArea, cands);
+      if (!m) {
+        const c = cands[0];
+        const g = getFaceGeom(part, c.meshIndex, c.faceIndex);
+        if (g && g.kind !== 'other') m = { ...c, geom: g, area: faceArea(part, c.meshIndex, c.faceIndex) };
+      }
+      if (m) return { ...m, origin: ref.origin };
+    }
+  }
+  if (!ref.sig || ref.sig.kind === 'other') return null;
+  const m = matchFace(part, ref.sig, ref.sigArea);
+  if (!m) return null;
+  return { ...m, origin: ref.origin ?? origins?.[m.meshIndex]?.[m.faceIndex] };
+}
+
+/** matchFaceRef sonucunu referansa uygular; değişiklik yoksa aynı nesne döner */
+export function applyFaceMatch(ref: FaceRef, m: FaceMatch & { origin?: FaceOrigin }): FaceRef {
+  const same =
+    m.meshIndex === ref.meshIndex &&
+    m.faceIndex === ref.faceIndex &&
+    JSON.stringify(m.geom) === JSON.stringify(ref.sig) &&
+    JSON.stringify(m.origin) === JSON.stringify(ref.origin);
+  if (same) return ref;
+  const next: FaceRef = { ...ref, meshIndex: m.meshIndex, faceIndex: m.faceIndex, sig: m.geom, sigArea: m.area };
+  if (m.origin) next.origin = m.origin;
+  else delete next.origin;
+  return next;
+}
+
+/** Gövde yüz referansına imza + köken ekler (mate/projeksiyon kurulurken) */
+export function faceRefSig(part: Pick<Part, 'fileId' | 'nodeKey'>, ref: FaceRef): FaceRef {
+  const g = getFaceGeom(part, ref.meshIndex, ref.faceIndex);
+  if (!g || g.kind === 'other') return ref;
+  const next: FaceRef = { ...ref, sig: g, sigArea: faceArea(part, ref.meshIndex, ref.faceIndex) };
+  const o = originsOf(part.fileId)?.[ref.meshIndex]?.[ref.faceIndex];
+  if (o) next.origin = o;
+  else delete next.origin;
+  return next;
 }
 

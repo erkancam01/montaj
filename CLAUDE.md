@@ -7,7 +7,7 @@ yıllarca SolidWorks 2022 kullanmıştır: arayüz ve davranış kararlarında S
 ## Çalıştırma
 - `npm install` (postinstall `scripts/copy-occt.mjs` occt-import-js dosyalarını `public/`'e kopyalar)
 - `npm run dev` → http://localhost:5173 (`.claude/launch.json`: "step-montaj")
-- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:mates` (mate çözücü testleri)
+- `npm run build` (tsc + vite build) · `npx tsc --noEmit -p .` · `npm run test:mates` (mate çözücü testleri) · `npm run test:origins` (yüz kökeni / topolojik ad testleri)
 
 ## Yığın
 Vite 8, React 19, TypeScript, three r187, @react-three/fiber 9, drei 10, zustand 5, idb-keyval, jszip,
@@ -24,12 +24,16 @@ Sahne Z-yukarı (`src/setup.ts`), birim mm. Proje tarayıcıda IndexedDB'de otom
   `src/lib/dof.ts` serbestlik, `src/lib/partStatus.ts` (f)/(-) işaretleri.
 - `src/lib/rigid.ts`: rijit gruplar. `src/lib/faceGeometry.ts`: yüz tanıma (düzlem/silindir).
 - `src/modeling/`: actions (gövde/sketch/özellik oturumları), bodyManager (çekirdekte yeniden üretim, yüz
-  imzasıyla yeniden eşleme), externalRefs/refLocks (başka parçalardan canlı projeksiyon, bağlı gövde kilidi).
+  kökeni + imzayla yeniden eşleme; faceOrigin = topolojik ad: özellik+sketch eğrisi/kapak, faceMatch), externalRefs/refLocks (başka parçalardan canlı projeksiyon, bağlı gövde kilidi).
 - `src/kernel/`: replicad worker (build, mesh, STEP export). `src/sketch/`: planegcs çözücü, bölgeler, oturum.
 - Arayüz: `src/components/Toolbar.tsx` (sekmeli komut çubuğu), `src/components/command/` (komut paneli, onay
   köşesi, bağlam kutusu, sağ tık ve S menüsü), `PartTree.tsx` (tek tasarım ağacı),
   `viewport/CadControls.ts` (SolidWorks fare şeması), `viewport/DragController.tsx` (sol-sürükle taşı,
   sağ-sürükle döndür, mate'e göre kısıtlı), `src/lib/viewCommands.ts` + `hooks/useViewShortcuts.ts` (Ctrl+1…8, Space).
+
+- Parametreler: `src/lib/expr.ts` (güvenli ifade değerlendirici), `src/modeling/params.ts` (applyParameters: her
+  commit'te ifadeli sketch ölçüleri `SkConstraint.expr`, özellik alanları `Feature.exprs`, mate `offsetExpr/angleExpr`
+  hesaplanır; değişen sketch başsız çözülür), `src/components/params/` (ParamsDialog, ExprField). `npm run test:expr`.
 
 ## Çalışma kuralları
 - Kullanıcı her şeyin tek sohbette yürümesini istiyor: ayrı Claude oturumu açma; paralel iş gerekiyorsa bu

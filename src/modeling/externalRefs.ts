@@ -26,7 +26,7 @@ import type {
   Vec3,
 } from '../types';
 import { bodyFileId, isBodyFileId } from '../types';
-import { faceArea, matchFace } from './faceMatch';
+import { applyFaceMatch, faceRefSig, matchFaceRef } from './faceMatch';
 import { liveSourcesOf } from './refLocks';
 
 // ---------------------------------------------------------------- Vektör yardımcıları
@@ -90,12 +90,11 @@ function localToBody(doc: Doc, bodyId: string, src: Source): Transform | null {
 function resolveFace(part: Part, ref: FaceRef): { ref: FaceRef; geom: FaceGeom; mesh: ParsedMesh } | null {
   const node = geometryCache.get(part.fileId)?.nodes[part.nodeKey];
   if (!node) return null;
-  if (isBodyFileId(part.fileId) && ref.sig && ref.sig.kind !== 'other') {
-    const m = matchFace(part, ref.sig, ref.sigArea);
+  if (isBodyFileId(part.fileId) && ((ref.sig && ref.sig.kind !== 'other') || ref.origin)) {
+    // Önce yüz kökeni (özellik + sketch eğrisi), sonra imza
+    const m = matchFaceRef(part, ref);
     if (!m) return null;
-    const same = m.meshIndex === ref.meshIndex && m.faceIndex === ref.faceIndex && JSON.stringify(m.geom) === JSON.stringify(ref.sig);
-    const next = same ? ref : { ...ref, meshIndex: m.meshIndex, faceIndex: m.faceIndex, sig: m.geom, sigArea: m.area };
-    return { ref: next, geom: m.geom, mesh: node.meshes[m.meshIndex] };
+    return { ref: applyFaceMatch(ref, m), geom: m.geom, mesh: node.meshes[m.meshIndex] };
   }
   const g = getFaceGeom(part, ref.meshIndex, ref.faceIndex);
   const mesh = node.meshes[ref.meshIndex];
@@ -755,6 +754,5 @@ function fileVersion(fileId: string): number {
 export function faceRefWithSig(doc: Doc, ref: FaceRef): FaceRef {
   const part = doc.parts.find((p) => p.id === ref.partId);
   if (!part || !isBodyFileId(part.fileId)) return ref;
-  const g = getFaceGeom(part, ref.meshIndex, ref.faceIndex);
-  return g && g.kind !== 'other' ? { ...ref, sig: g, sigArea: faceArea(part, ref.meshIndex, ref.faceIndex) } : ref;
+  return faceRefSig(part, ref);
 }

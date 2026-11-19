@@ -58,6 +58,18 @@ ilk girildiğinde arka planda yüklenir.
   **Bağlantıyı kopar** referansları sabit kopyaya çevirir ve kilidi kaldırır.
 - Parçanın kendi yüzünden alınan referanslar ve döngü oluşturacak referanslar sabit kopya olarak alınır.
 
+## Parametreler
+
+- **Parametreler (ƒx)** (Özellikler sekmesi ya da Dosya menüsü): Ad, Birim, İfade, Değer, Yorum tablosu.
+  İfadeler sayı, birim (`mm cm m in deg`), `+ - * / ^`, `min max abs sqrt round sin cos…` ve diğer parametre
+  adlarını kullanabilir (ör. `FFH - 2*KA`). Döngü ve bilinmeyen adlar kırmızı gösterilir.
+- Bağlamak için sketch ölçüsüne (etikete çift tık ya da sol paneldeki liste), özellik değerine (extrude mesafesi,
+  desen adedi…) ya da mate mesafe/açısına sayı yerine parametre adı ya da ifade yazın. `=AD` yazmak, mevcut değerle
+  yeni parametre oluşturup bağlar. Bağlı alanlarda **ƒx** işareti görünür.
+- Tabloda bir değeri değiştirince bağlı sketch'ler yeniden çözülür, parçalar yeniden oluşur ve mate'ler yüzü
+  kökeniyle (hangi özellik + hangi sketch çizgisi) yeniden bularak yerinde kalır. Tek geri al adımıdır.
+- CSV (Excel için `;`) ve JSON içe/dışa aktarma; İptal, pencere açıldığından beri yapılanları geri alır.
+
 ## Dışa aktarma
 
 - **STEP**: tüm görünür montaj (çizilen parçalar + içe aktarılan parçaların gerçek CAD geometrisi) tek dosya.
