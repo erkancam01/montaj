@@ -39,6 +39,11 @@ export interface Part extends Transform {
   instanceId: string;
   fileId: string;
   nodeKey: number;
+  /**
+   * Çizilen gövdenin ek katısı: çekirdekteki katı anahtarı (ilk katı = gövdenin asıl parçası, anahtarsız).
+   * nodeKey her üretimde bu anahtara göre güncellenir.
+   */
+  solidKey?: string;
   name: string;
   origin: Transform;
   visible: boolean;

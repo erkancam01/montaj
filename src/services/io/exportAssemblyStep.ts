@@ -19,7 +19,7 @@ export async function exportAssemblyAsStep(): Promise<{ blob: Blob; warnings: st
       const world = partWorld(inst, part);
       if (isBodyFileId(part.fileId)) {
         const body = doc.bodies.find((b) => b.id === bodyIdOfFile(part.fileId));
-        if (body) items.push({ kind: 'body', name: part.name, color: part.color, body, world });
+        if (body) items.push({ kind: 'body', name: part.name, color: part.color, body, solid: part.nodeKey, world });
         continue;
       }
       const node = geometryCache.get(part.fileId)?.nodes[part.nodeKey];

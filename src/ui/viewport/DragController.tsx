@@ -1,17 +1,18 @@
-// Fareyle doğrudan taşıma/döndürme (SolidWorks "bileşeni sürükle" davranışı):
-// - Parçaya sol tuşla basıp sürükle: taşı (tutulan nokta, kamera düzlemine paralel düzlemde imleci izler)
-// - Sağ tuşla basıp sürükle: gövde merkezi etrafında serbest döndür (trackball)
+// Fareyle doğrudan döndürme/taşıma:
+// - Parçaya sol tuşla basıp sürükle: parçanın kendi merkezi etrafında serbest döndür (trackball)
+// - Sağ tuşla basıp sürükle: taşı (tutulan nokta, kamera düzlemine paralel düzlemde imleci izler)
 // Mate'li gövdeler çözücüde "tutulan" olarak çözülür: hareket kalan serbestlik yönlerine izdüşer
 // (eşmerkezlide eksen etrafında dönme + eksen boyunca kayma, tam tanımlıda kıpırdamaz).
 // 4 px eşiğinin altı tıklamadır (seçim PartNode'da); hareketsiz sağ tıka dokunulmaz.
-// Dokunmatikte parça sürüklemesi yalnız dokunmatik araç çubuğundaki "Taşı" (sol-sürükle eşdeğeri) ya da
-// "Döndür" (sağ-sürükle eşdeğeri) kipi açıkken yapılır; kapalıyken tek parmak kameraya aittir.
+// Dokunmatikte parça sürüklemesi yalnız dokunmatik araç çubuğundaki "Taşı" ya da "Döndür" kipi açıkken
+// yapılır; kapalıyken tek parmak kameraya aittir.
 // Kip açıkken parçaya uzun basmak (hareketsiz ~500 ms) yine sağ tık menüsünü açar.
 import { useEffect } from 'react';
 import { fireLongPress, hapticTick, LONG_PRESS_MS, TAP_PX } from '@/ui/hooks/useLongPress';
 import { touchMode } from '@/ui/viewport/touchState';
 import { useThree } from '@react-three/fiber';
-import { Plane, Quaternion, Raycaster, Vector2, Vector3, type Camera, type Object3D } from 'three';
+import { Box3, Plane, Quaternion, Raycaster, Vector2, Vector3, type Camera, type Object3D } from 'three';
+import { geometryCache } from '@/core/geometry/geometryCache';
 import { composeT, invertT, partWorld } from '@/core/math/math';
 import { applyWorldDelta, groupFrameWorld, groupOfPart } from '@/core/assembly/rigid';
 import { lockedPartIds } from '@/core/modeling/refLocks';
@@ -20,9 +21,9 @@ import type { Doc, Transform } from '@/core/types';
 import { inViewCube, sceneRefs } from '@/ui/viewport/sceneRefs';
 
 const THRESHOLD_PX = 4;
-/** Sağ sürüklemede piksel başına dönme (rad) */
+/** Döndürme sürüklemesinde piksel başına dönme (rad) */
 const ROT_PER_PX = 0.01;
-/** Sol sürüklemede tek karede izin verilen en büyük düzeltici dönme (rad) */
+/** Taşıma sürüklemesinde tek karede izin verilen en büyük düzeltici dönme (rad) */
 const MAX_STEP_ROT = 0.35;
 
 /** Taşınan rijit küme: instance (dönüşümü doğrudan) ya da parça / grup (parçaların dünya deltası) */
@@ -35,7 +36,10 @@ interface MoveSet {
 }
 
 interface DragState {
+  /** Basılan fare tuşu (sağ tık menüsü bastırma için) */
   button: 0 | 2;
+  /** Sürüklemenin yaptığı iş */
+  mode: 'move' | 'rotate';
   pointerId: number;
   /** Dokunmatik sürükleme (eşik TAP_PX, uzun basma zamanlayıcısı) */
   touch: boolean;
@@ -54,6 +58,8 @@ interface DragState {
   start?: Transform;
   grabLocal?: Vector3;
   plane?: Plane;
+  /** Döndürme merkezi, kümenin yerel koordinatında (parça geometrisinin kutu merkezi) */
+  pivotLocal?: Vector3;
 }
 
 let rightDragEndedAt = 0;
@@ -69,7 +75,7 @@ function toTransform(p: Vector3, q: Quaternion): Transform {
   return { position: [p.x, p.y, p.z], quaternion: [q.x, q.y, q.z, q.w] };
 }
 
-/** Kümenin dünya pozu (pivot = gövde merkezi) */
+/** Kümenin dünya pozu */
 function poseOf(doc: Doc, set: MoveSet): Transform | null {
   if (set.kind === 'instance') {
     const i = doc.instances.find((x) => x.id === set.id);
@@ -93,6 +99,19 @@ function applyDelta(base: Doc, set: MoveSet, delta: Transform): Doc {
     };
   }
   return applyWorldDelta(base, set.partIds, delta);
+}
+
+/** Döndürme merkezi (kümenin yerel koordinatında): tek parçada geometrisinin kutu merkezi, aksi hâlde poz */
+function pivotLocalOf(doc: Doc, set: MoveSet): Vector3 {
+  if (set.kind !== 'parts' || set.groupId) return new Vector3();
+  const p = doc.parts.find((x) => x.id === set.id);
+  const node = p && geometryCache.get(p.fileId)?.nodes[p.nodeKey];
+  const box = new Box3();
+  for (const m of node?.meshes ?? []) {
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    if (m.geometry.boundingBox) box.union(m.geometry.boundingBox);
+  }
+  return box.isEmpty() ? new Vector3() : box.getCenter(new Vector3());
 }
 
 /** Tıklanan parçadan taşınacak küme: selectMode 'instance' → instance; gruptaki parça → grup; yoksa parça */
@@ -188,6 +207,7 @@ export function DragController() {
       d.grabLocal = d.hit.clone().sub(sp).applyQuaternion(sq.clone().invert());
       const n = camera.getWorldDirection(new Vector3());
       d.plane = new Plane().setFromNormalAndCoplanarPoint(n, d.hit);
+      d.pivotLocal = pivotLocalOf(doc, d.set);
       st.beginDrag();
     };
 
@@ -247,8 +267,14 @@ export function DragController() {
       const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
       const axis = up.multiplyScalar(dx).addScaledVector(right, dy).normalize();
       const dq = new Quaternion().setFromAxisAngle(axis, len * ROT_PER_PX);
-      const q = dq.multiply(new Quaternion(...cur.quaternion)).normalize();
-      commitTarget(d, toTransform(new Vector3(...cur.position), q));
+      const cq = new Quaternion(...cur.quaternion);
+      const q = dq.clone().multiply(cq).normalize();
+      // Merkez sabit kalsın: p' = c + dq·(p − c), c = p + q·pivotLocal
+      const p = new Vector3(...cur.position);
+      const off = (d.pivotLocal ?? new Vector3()).clone().applyQuaternion(cq);
+      const c = p.clone().add(off);
+      const p2 = c.sub(off.applyQuaternion(dq));
+      commitTarget(d, toTransform(p2, q));
     };
 
     const finish = (cancel: boolean) => {
@@ -278,7 +304,7 @@ export function DragController() {
         beginActive(d);
       }
       if (d.blocked) return;
-      if (d.button === 0) moveTranslate(d, e.clientX, e.clientY);
+      if (d.mode === 'move') moveTranslate(d, e.clientX, e.clientY);
       else moveRotate(d, e.clientX - d.lastX, e.clientY - d.lastY);
       d.lastX = e.clientX;
       d.lastY = e.clientY;
@@ -300,14 +326,15 @@ export function DragController() {
     const onDown = (e: PointerEvent) => {
       if (e.target !== canvas || drag || inViewCube(e.clientX, e.clientY)) return;
       const touch = e.pointerType === 'touch';
-      let button = e.button;
+      const button = e.button;
+      if (button !== 0 && button !== 2) return;
+      let mode: DragState['mode'] = button === 0 ? 'rotate' : 'move';
       if (touch) {
         // Dokunmatik: yalnız Taşı / Döndür kipinde ve ilk parmakla
-        const mode = touchMode();
-        if (mode === 'camera' || !e.isPrimary || e.button !== 0) return;
-        button = mode === 'move' ? 0 : 2;
+        const tm = touchMode();
+        if (tm === 'camera' || !e.isPrimary || e.button !== 0) return;
+        mode = tm === 'move' ? 'move' : 'rotate';
       }
-      if (button !== 0 && button !== 2) return;
       if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       if (!eligible()) return;
       const hit = pickPart(e.clientX, e.clientY);
@@ -317,6 +344,7 @@ export function DragController() {
       if (!set) return;
       drag = {
         button: button as 0 | 2,
+        mode,
         pointerId: e.pointerId,
         touch,
         lpTimer: 0,

@@ -19,6 +19,7 @@ import { faceRefWithSig, localPlaneOf } from '@/core/modeling/externalRefs';
 import { ownPartIds, wouldCycle } from '@/core/modeling/refLocks';
 import { Quaternion, Vector3 } from 'three';
 import { BASE_PLANES } from '@/core/modeling/planes';
+import { bodyPrimaryPart, solidPartName } from '@/core/modeling/bodyParts';
 import { dependentsOf, FEATURE_LABELS, featureDefaults } from '@/core/features/registry';
 
 const st = () => useAssembly.getState();
@@ -38,9 +39,9 @@ export function bodyInstance(bodyId: string): Instance | undefined {
   return st().doc.instances.find((i) => i.fileId === fid);
 }
 
+/** Gövdenin asıl parçası (ilk katı; gövde çerçevesi). Ek katıların parçaları ayrıdır (core/modeling/bodyParts). */
 export function bodyPart(bodyId: string): Part | undefined {
-  const inst = bodyInstance(bodyId);
-  return inst ? st().doc.parts.find((p) => p.instanceId === inst.id) : undefined;
+  return bodyPrimaryPart(st().doc, bodyId);
 }
 
 /** Parça bir gövdeye aitse gövde id'si */
@@ -232,7 +233,7 @@ export function renameBody(bodyId: string, name: string) {
     ...d,
     bodies: d.bodies.map((b) => (b.id === bodyId ? { ...b, name: n } : b)),
     instances: d.instances.map((i) => (i.fileId === fid ? { ...i, name: n } : i)),
-    parts: d.parts.map((p) => (p.fileId === fid ? { ...p, name: n } : p)),
+    parts: d.parts.map((p) => (p.fileId === fid ? { ...p, name: p.solidKey ? solidPartName(n, p.nodeKey) : n } : p)),
   }));
 }
 

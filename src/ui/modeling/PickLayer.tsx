@@ -5,6 +5,7 @@
 // - revolve ekseni, desen yönü/ekseni ve ayna düzlemi için basit görseller
 // Tıklama/hover işlemleri canvas üzerinde elle raycast edilir (gövde mesh'leri olayları yutmasın diye);
 // tüketilen tıklama R3F'ye ulaşmaz.
+import { bodyPrimaryPart } from '@/core/modeling/bodyParts';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
@@ -124,7 +125,7 @@ function useBodyPart(bodyId: string) {
   return useAssembly(
     useShallow((s) => {
       const fid = bodyFileId(bodyId);
-      const p = s.doc.parts.find((x) => x.fileId === fid);
+      const p = bodyPrimaryPart(s.doc, bodyId);
       return { partId: p?.id ?? null, status: s.fileStatus[fid] };
     }),
   );
@@ -256,8 +257,7 @@ function hitEdge(ctx: Ctx, pick: PickRequest): (Hover & { kind: 'edge' }) | null
 
 /** Gövde-yerel ışın (gövdenin ilk parçasının çerçevesinde) */
 function bodyRay(ctx: Ctx, bodyId: string): Ray | null {
-  const fid = bodyFileId(bodyId);
-  const part = st().doc.parts.find((p) => p.fileId === fid);
+  const part = bodyPrimaryPart(st().doc, bodyId);
   const group = part ? objectRegistry.get(part.id) : undefined;
   if (!group) return null;
   group.updateWorldMatrix(true, false);

@@ -24,7 +24,10 @@ ilk girildiğinde arka planda yüklenir.
 ## Montaj
 
 - STEP/IGES/BREP dosyalarını pencereye sürükleyin ya da **Dosya ekle**.
-- Parçaları gizmo ile taşıyın/döndürün (W/E), **Zemine oturt** (G).
+- Parçaları gizmo ile taşıyın/döndürün (W/E), **Zemine oturt** (G). Fareyle: parçaya sol basıp sürükle =
+  döndür (kendi merkezi etrafında), sağ basıp sürükle = taşı; mate'li parça yalnız serbest yönlerinde hareket eder.
+- Extrude/Revolve'da **Sonucu birleştir** kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur
+  (birbirine değmeyen bölgeler de ayrı parça olur).
 - **Mate (M)**: önce yerinde kalacak referans yüzeye, sonra hareket edecek parçanın yüzeyine tıklayın.
   Tipler: Çakışık (+mesafe), Eşmerkezli, Paralel, Dik, Açı.
 - **Rijit grup**: Ctrl+tık ile parçaları seçip **Grupla** (Ctrl+G). Grup tek gövde gibi taşınır ve mate'lerde birlikte hareket eder.

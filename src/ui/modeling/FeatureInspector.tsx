@@ -540,7 +540,22 @@ function ExtrudeForm({ d, body }: { d: ExtrudeFeature; body: Body | undefined })
           <Check label="Yönü çevir" checked={d.reverse} onChange={(v) => up({ reverse: v })} />
         </Field>
       )}
+      {!cut && <MergeCheck d={d} />}
     </section>
+  );
+}
+
+/** "Sonucu birleştir": kapalıysa yeni katı ayrı kalır ve montajda ayrı parça olur */
+function MergeCheck({ d }: { d: ExtrudeFeature | RevolveFeature }) {
+  return (
+    <Field label="">
+      <Check
+        label="Sonucu birleştir"
+        checked={d.merge !== false}
+        title="Açık: dokunduğu katılarla tek katı olur. Kapalı: ayrı katı olarak kalır ve montajda ayrı parça olur."
+        onChange={(v) => up({ merge: v })}
+      />
+    </Field>
   );
 }
 
@@ -598,6 +613,7 @@ function RevolveForm({ d, body }: { d: RevolveFeature; body: Body | undefined })
       <Field label="İşlem">
         <OpSeg value={d.operation} onChange={(v) => up({ operation: v })} />
       </Field>
+      {d.operation !== 'cut' && <MergeCheck d={d} />}
     </section>
   );
 }

@@ -15,8 +15,11 @@ export interface BodyMesh {
 }
 
 export interface BodyBuildResult {
-  /** Katı yoksa (yalnız sketch'ler) null */
-  mesh: BodyMesh | null;
+  /**
+   * Ayrı katılar (oluşma sırasıyla). İlk katı gövdenin asıl parçasıdır; diğerleri montajda ayrı parça olur.
+   * Katı yoksa (yalnız sketch'ler) boş.
+   */
+  solids: { key: string; mesh: BodyMesh }[];
   /** featureId → hata (Türkçe). Hatalı özellik atlanır, sonrakiler denenir. */
   featureErrors: Record<string, string>;
 }
@@ -172,6 +175,8 @@ export type ExportItem =
       /** sRGB #rrggbb ya da null */
       color: string | null;
       body: Body;
+      /** Gövdenin kaçıncı katısı (Part.nodeKey) */
+      solid: number;
       /** gövde-yerel → dünya */
       world: Transform;
     }

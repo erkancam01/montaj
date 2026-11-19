@@ -332,18 +332,21 @@ export function computeFaceOrigins(
 
 // ---------------------------------------------------------------- önbellek (üretilmiş gövdeler)
 
-const cache = new Map<string, { file: ParsedFile; origins: (FaceOrigin | undefined)[][] }>();
+type Origins = (FaceOrigin | undefined)[][];
+const cache = new Map<string, { file: ParsedFile; origins: Origins[] }>();
 
-/** geometryCache'teki gövde dosyasının (fileId) yüz kökenleri: mesh × yüz */
-export function faceOrigins(features: Feature[], fileId: string, failed?: Record<string, unknown>): (FaceOrigin | undefined)[][] {
+/** geometryCache'teki gövde dosyasının (fileId) yüz kökenleri: düğüm (ayrı katı) × mesh × yüz */
+export function faceOrigins(features: Feature[], fileId: string, failed?: Record<string, unknown>): Origins[] {
   const file = geometryCache.get(fileId);
-  const node = file?.nodes[0];
-  if (!node) return [];
-  const scale = Math.hypot(...node.size);
-  const part = { fileId, nodeKey: 0 };
-  return node.meshes.map((m, mi) => {
-    const geoms = m.faces.map((_, fi) => getFaceGeom(part, mi, fi));
-    return computeFaceOrigins(features, geoms, scale, failed);
+  if (!file) return [];
+  // Ölçek tüm gövdeden (katılar aynı gövde-yerel koordinatta)
+  const scale = Math.hypot(...file.size);
+  return file.nodes.map((node, nodeKey) => {
+    const part = { fileId, nodeKey };
+    return node.meshes.map((m, mi) => {
+      const geoms = m.faces.map((_, fi) => getFaceGeom(part, mi, fi));
+      return computeFaceOrigins(features, geoms, scale, failed);
+    });
   });
 }
 
@@ -366,13 +369,13 @@ export function dropOrigins(fileId: string) {
   cache.delete(fileId);
 }
 
-/** Güncel geometrinin köken tablosu (dosya değiştiyse/ hesaplanmadıysa null) */
-export function originsOf(fileId: string): (FaceOrigin | undefined)[][] | null {
+/** Güncel geometride bir düğümün (katının) köken tablosu (dosya değiştiyse / hesaplanmadıysa null) */
+export function originsOf(fileId: string, nodeKey = 0): Origins | null {
   const hit = cache.get(fileId);
-  return hit && hit.file === geometryCache.get(fileId) ? hit.origins : null;
+  return hit && hit.file === geometryCache.get(fileId) ? (hit.origins[nodeKey] ?? null) : null;
 }
 
 /** Tek yüzün kökeni */
-export function originOf(fileId: string, meshIndex: number, faceIndex: number): FaceOrigin | undefined {
-  return originsOf(fileId)?.[meshIndex]?.[faceIndex];
+export function originOf(fileId: string, meshIndex: number, faceIndex: number, nodeKey = 0): FaceOrigin | undefined {
+  return originsOf(fileId, nodeKey)?.[meshIndex]?.[faceIndex];
 }

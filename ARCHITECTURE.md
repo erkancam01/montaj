@@ -25,7 +25,7 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | `src/core/math/` | Dönüşüm matematiği (`math.ts`), ifade değerlendirici (`expr.ts`) |
 | `src/core/assembly/` | Mate çözücü, mate tip kuralları, rijit gruplar, serbestlik derecesi |
 | `src/core/geometry/` | Yüz tanıma (düzlem/silindir), geometri önbelleği |
-| `src/core/modeling/` | Parametreler (`params.ts`), yüz kökeni / eşleme, dış referanslar, temel düzlemler |
+| `src/core/modeling/` | Parametreler (`params.ts`), yüz kökeni / eşleme, dış referanslar, temel düzlemler, gövdenin ayrı katıları → montaj parçaları (`bodyParts.ts`) |
 | `src/core/sketch/` | Sketch kısıt çözücü (planegcs), kapalı bölge bulma, 2B geometri |
 | `src/state/` | Store (`useAssembly.ts`), montaj eylemleri, modelleme eylemleri, sketch oturumu, parça durumu |
 | `src/services/kernel/` | Modelleme çekirdeği (replicad/OpenCascade worker): katı üretimi, mesh, STEP yazma |
@@ -59,6 +59,8 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | Sketch ilişkileri / ölçüleri (çözücü) | `src/core/sketch/solverCore.ts` |
 | Parametre ifadeleri (birimler, fonksiyonlar) | `src/core/math/expr.ts` |
 | Fare ve dokunmatik kamera kontrolü | `src/ui/viewport/CadControls.ts` |
+| Parçayı fareyle döndürme / taşıma (sol / sağ sürükle) | `src/ui/viewport/DragController.tsx` |
+| Bir gövdenin ayrı katılarının montajda ayrı parça olması ("Sonucu birleştir") | `src/services/kernel/build.ts` (`applyOp`), `src/core/modeling/bodyParts.ts` |
 | Klavye kısayolları | `src/app/useShortcuts.ts`, `src/ui/hooks/useViewShortcuts.ts`, `src/ui/commands/useCommandKeys.ts` |
 | Telefon düzeni | `src/ui/mobile/mobile.css`, `MobileDock.tsx` |
 | Proje kaydı / açma | `src/services/io/session.ts`, `persistence.ts` |

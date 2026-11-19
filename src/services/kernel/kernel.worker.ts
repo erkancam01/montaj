@@ -56,7 +56,7 @@ async function handle(req: KernelRequest) {
       ctx.postMessage({ id: req.id, ok: true, result: null });
     } else if (req.type === 'build') {
       const result = buildBodyMesh(req.body);
-      ctx.postMessage({ id: req.id, ok: true, result }, meshTransferables(result.mesh));
+      ctx.postMessage({ id: req.id, ok: true, result }, meshTransferables(result));
     } else if (req.type === 'export') {
       const result = await exportAssembly(req.items, req.blobs);
       ctx.postMessage({ id: req.id, ok: true, result });

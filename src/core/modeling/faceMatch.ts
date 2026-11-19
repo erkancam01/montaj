@@ -89,7 +89,7 @@ export function matchFace(
  * (eski köken bulunamadıysa korunur — özellik geri gelince yeniden bağlanır).
  */
 export function matchFaceRef(part: Pick<Part, 'fileId' | 'nodeKey'>, ref: FaceRef): (FaceMatch & { origin?: FaceOrigin }) | null {
-  const origins = originsOf(part.fileId);
+  const origins = originsOf(part.fileId, part.nodeKey);
   if (ref.origin && origins) {
     const cands = originCandidates(origins, ref.origin);
     if (cands.length) {
@@ -128,7 +128,7 @@ export function faceRefSig(part: Pick<Part, 'fileId' | 'nodeKey'>, ref: FaceRef)
   const g = getFaceGeom(part, ref.meshIndex, ref.faceIndex);
   if (!g || g.kind === 'other') return ref;
   const next: FaceRef = { ...ref, sig: g, sigArea: faceArea(part, ref.meshIndex, ref.faceIndex) };
-  const o = originsOf(part.fileId)?.[ref.meshIndex]?.[ref.faceIndex];
+  const o = originsOf(part.fileId, part.nodeKey)?.[ref.meshIndex]?.[ref.faceIndex];
   if (o) next.origin = o;
   else delete next.origin;
   return next;

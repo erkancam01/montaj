@@ -182,6 +182,11 @@ export interface ExtrudeFeature extends FeatureBase {
   /** Tüm gövde boyunca (distance yok sayılır; reverse/symmetric dikkate alınır) */
   throughAll: boolean;
   operation: BoolOp;
+  /**
+   * Sonucu birleştir (yalnız operation 'add'): true/yok → dokunduğu katılarla birleşir; false → ayrı katı
+   * olarak kalır (montajda ayrı parça olur).
+   */
+  merge?: boolean;
 }
 
 export interface RevolveFeature extends FeatureBase {
@@ -194,6 +199,11 @@ export interface RevolveFeature extends FeatureBase {
   angle: number;
   reverse: boolean;
   operation: BoolOp;
+  /**
+   * Sonucu birleştir (yalnız operation 'add'): true/yok → dokunduğu katılarla birleşir; false → ayrı katı
+   * olarak kalır (montajda ayrı parça olur).
+   */
+  merge?: boolean;
 }
 
 /** Bir B-rep kenarının geometrik imzası (gövde-yerel). Yeniden üretimde en yakın kenarla eşleşir. */

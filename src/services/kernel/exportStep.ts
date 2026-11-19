@@ -71,11 +71,19 @@ export async function exportAssembly(
   const files = new Map<string, Candidate[] | null>();
 
   const imports: Extract<ExportItem, { kind: 'import' }>[] = [];
+  const builtBodies = new Map<string, ReturnType<typeof buildShape>>();
   for (const it of items) {
     if (it.kind === 'body') {
-      const { shape, featureErrors } = buildShape(it.body);
+      let b = builtBodies.get(it.body.id);
+      const first = !b;
+      if (!b) {
+        b = buildShape(it.body);
+        builtBodies.set(it.body.id, b);
+      }
+      const { featureErrors } = b;
+      const shape = b.solids[it.solid]?.shape ?? null;
       const nErr = Object.keys(featureErrors).length;
-      if (nErr) warnings.push(`${it.name}: ${nErr} özellik üretilemedi`);
+      if (nErr && first) warnings.push(`${it.name}: ${nErr} özellik üretilemedi`);
       if (!shape) {
         warnings.push(`${it.name}: katı yok, atlandı`);
         continue;

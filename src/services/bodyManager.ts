@@ -14,6 +14,8 @@ import { resolveBody, sourcesKey } from '@/core/modeling/externalRefs';
 import { liveSourcesOf } from '@/core/modeling/refLocks';
 import { initSketchSolver, isSketchSolverReady } from '@/core/sketch/solver';
 import { gizmoBusy } from '@/state/interaction';
+import { syncSolidParts } from '@/core/modeling/bodyParts';
+import { uid } from '@/core/math/math';
 
 export { faceArea, matchFace };
 
@@ -38,32 +40,57 @@ function effectiveFeatures(body: Body): Feature[] {
   return fs.isNew ? [...body.features, d] : body.features.map((f) => (f.id === d.id ? d : f));
 }
 
-function toParsed(body: Body, mesh: BodyMesh | null): ParsedFile {
-  const meshes: ParsedMesh[] = [];
-  let size: Vec3 = [0, 0, 0];
-  if (mesh && mesh.index.length) {
-    const g = new BufferGeometry();
-    g.setAttribute('position', new BufferAttribute(mesh.position, 3));
-    if (mesh.normal.length === mesh.position.length) g.setAttribute('normal', new BufferAttribute(mesh.normal, 3));
-    g.setIndex(new BufferAttribute(mesh.index, 1));
-    if (!g.getAttribute('normal')) g.computeVertexNormals();
-    g.computeBoundingBox();
-    g.computeBoundingSphere();
-    const bb = g.boundingBox!;
-    size = [bb.max.x - bb.min.x, bb.max.y - bb.min.y, bb.max.z - bb.min.z];
-    meshes.push({
+/** Çekirdek mesh'i → ParsedMesh (boşsa null) ve kutusu */
+function toMesh(mesh: BodyMesh): { mesh: ParsedMesh; min: Vec3; max: Vec3 } | null {
+  if (!mesh.index.length) return null;
+  const g = new BufferGeometry();
+  g.setAttribute('position', new BufferAttribute(mesh.position, 3));
+  if (mesh.normal.length === mesh.position.length) g.setAttribute('normal', new BufferAttribute(mesh.normal, 3));
+  g.setIndex(new BufferAttribute(mesh.index, 1));
+  if (!g.getAttribute('normal')) g.computeVertexNormals();
+  g.computeBoundingBox();
+  g.computeBoundingSphere();
+  const bb = g.boundingBox!;
+  return {
+    mesh: {
       geometry: g,
       color: null,
       hasVertexColors: false,
       faces: mesh.faces.length ? mesh.faces : [{ first: 0, last: mesh.index.length / 3 - 1 }],
       brepEdges: mesh.edges,
-    });
-  }
-  return {
-    nodes: [{ key: 0, name: body.name, path: [], center: [0, 0, 0], size, meshes }],
-    center: [0, 0, 0],
-    size,
+    },
+    min: [bb.min.x, bb.min.y, bb.min.z],
+    max: [bb.max.x, bb.max.y, bb.max.z],
   };
+}
+
+/**
+ * Gövde → ParsedFile: her ayrı katı bir düğüm (montajda ayrı parça; nodeKey = katı sırası). Hepsi gövde-yerel
+ * koordinattadır. Katı yoksa asıl parça için boş bir düğüm.
+ */
+function toParsed(body: Body, solids: { key: string; mesh: BodyMesh }[]): ParsedFile {
+  const nodes: ParsedFile['nodes'] = [];
+  const lo: Vec3 = [Infinity, Infinity, Infinity];
+  const hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  solids.forEach((s, i) => {
+    const m = toMesh(s.mesh);
+    const size: Vec3 = m ? [m.max[0] - m.min[0], m.max[1] - m.min[1], m.max[2] - m.min[2]] : [0, 0, 0];
+    if (m) for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], m.min[k]);
+      hi[k] = Math.max(hi[k], m.max[k]);
+    }
+    nodes.push({ key: i, name: body.name, path: [], center: [0, 0, 0], size, meshes: m ? [m.mesh] : [] });
+  });
+  if (!nodes.length) nodes.push({ key: 0, name: body.name, path: [], center: [0, 0, 0], size: [0, 0, 0], meshes: [] });
+  const size: Vec3 = lo[0] <= hi[0] ? [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]] : [0, 0, 0];
+  return { nodes, center: [0, 0, 0], size };
+}
+
+/** Gövdenin parçalarını katı listesiyle eşler (ek katı → ek parça); geçmişe yazmadan */
+function syncParts(bodyId: string, keys: string[]) {
+  const s = st();
+  const next = syncSolidParts(s.doc, bodyId, keys, uid);
+  if (next !== s.doc) s.replaceDocKeepHistory(next);
 }
 
 function disposeFile(f: ParsedFile | undefined) {
@@ -128,7 +155,7 @@ function schedule(body: Body) {
       if (inflight.get(body.id)?.seq !== my) return; // daha yeni istek var
       inflight.delete(body.id);
       if (!st().doc.bodies.some((b) => b.id === body.id)) return;
-      const file = toParsed(body, res.mesh);
+      const file = toParsed(body, res.solids);
       const old = geometryCache.get(fid);
       geometryCache.set(fid, file);
       built.set(body.id, { key, file });
@@ -141,6 +168,8 @@ function schedule(body: Body) {
         featureErrors: errs,
         message: nErr ? `${nErr} özellik üretilemedi` : undefined,
       });
+      // Ek katılar montajda ayrı parça (nodeKey'ler yeni sıraya göre) — mate eşlemesinden önce
+      syncParts(body.id, res.solids.map((x) => x.key));
       // Yeni geometri nesnesi → PartNode yeniden render (fileStatus nesnesi değişir)
       st().setFileStatus(fid, { status: 'ready' });
       remapMates(body.id);
@@ -152,7 +181,7 @@ function schedule(body: Body) {
       const message = e instanceof Error ? e.message : String(e);
       st().setBuildStatus(body.id, { state: 'error', featureErrors: {}, message: `Çekirdek hatası: ${message}` });
       if (!geometryCache.get(fid)) {
-        geometryCache.set(fid, toParsed(body, null));
+        geometryCache.set(fid, toParsed(body, []));
         st().setFileStatus(fid, { status: 'ready' });
       }
     });

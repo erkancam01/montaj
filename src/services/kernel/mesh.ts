@@ -10,8 +10,7 @@ export function meshOptions(shape: Shape3D): { tolerance: number; angularToleran
   return { tolerance: Math.max(0.01, diag * 1e-3), angularTolerance: 0.2 };
 }
 
-export function meshShape(shape: Shape3D): BodyMesh {
-  const opts = meshOptions(shape);
+export function meshShape(shape: Shape3D, opts = meshOptions(shape)): BodyMesh {
   const m = shape.mesh(opts);
   const position = new Float32Array(m.vertices);
   const normal = new Float32Array(m.normals.length === m.vertices.length ? m.normals : []);
@@ -72,17 +71,18 @@ export function meshShape(shape: Shape3D): BodyMesh {
 const shapeEdges = (s: Shape3D) => s.edges;
 
 /** postMessage için aktarılabilir tamponlar */
-export function meshTransferables(m: BodyMesh | null): ArrayBuffer[] {
-  if (!m) return [];
-  return [m.position.buffer, m.normal.buffer, m.index.buffer, m.edges.position.buffer] as ArrayBuffer[];
+export function meshTransferables(r: BodyBuildResult): ArrayBuffer[] {
+  return r.solids.flatMap(({ mesh: m }) => [m.position.buffer, m.normal.buffer, m.index.buffer, m.edges.position.buffer] as ArrayBuffer[]);
 }
 
 /** Gövdeyi üretir ve mesh'ler (worker ve testler için senkron giriş noktası) */
 export function buildBodyMesh(body: Body): BodyBuildResult {
-  const { shape, featureErrors } = buildShape(body);
-  if (!shape) return { mesh: null, featureErrors };
+  const { shape, solids, featureErrors } = buildShape(body);
+  if (!shape) return { solids: [], featureErrors };
   try {
-    return { mesh: meshShape(shape), featureErrors };
+    // Tüm katılar aynı hassasiyetle (gövde boyutuna göre)
+    const opts = meshOptions(shape);
+    return { solids: solids.map((s) => ({ key: s.key, mesh: meshShape(s.shape, opts) })), featureErrors };
   } catch (e) {
     throw new Error(errText(e, 'Görüntü ağı üretilemedi'));
   }

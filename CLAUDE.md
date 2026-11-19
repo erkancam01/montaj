@@ -44,5 +44,7 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
 ## Bilinen eksikler / sıradaki fikirler
 - Sketch: trim, teğet yay, spline yok.
 - Sabite bağlı zincirde uçtaki parça sürüklenince aradaki serbest parça birlikte gelmiyor.
+- Gövdenin ek katıları (ayrı parçalar) montajda taşınmışsa, gövde düzenlenirken sketch'ler asıl parçanın
+  çerçevesinde kalır; ek katı yeniden oluşursa (ör. önizlemede "Sonucu birleştir" açılıp kapanınca) konumu/mate'leri sıfırlanır.
 - Ctrl+1…8 normal Chrome sekmesinde tarayıcı tarafından yakalanabilir (Space menüsü yedek).
 - `invertWheel` ayarı kalıcı değil.

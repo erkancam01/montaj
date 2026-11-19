@@ -122,9 +122,12 @@ function fuseAll(shapes: Shape3D[]): Shape3D {
   return acc;
 }
 
-/** Araç katılarını tek şekle toplar (bileşik) */
+/**
+ * Katıları tek şekle toplar (bileşik). replicad makeCompound verilen şekilleri siler; girdiler sonra da
+ * kullanıldığı için (katı listesi) hafif kopyaları verilir.
+ */
 function compoundOf(shapes: Shape3D[]): Shape3D {
-  return shapes.length === 1 ? shapes[0] : (makeCompound(shapes) as Shape3D);
+  return shapes.length === 1 ? shapes[0] : (makeCompound(shapes.map((s) => s.clone())) as Shape3D);
 }
 
 // ---------------------------------------------------------------- kenar imzaları
@@ -239,8 +242,15 @@ interface Tool {
   shape: Shape3D;
 }
 
+/** Gövdenin bir katısı. key: katıyı ilk üreten özellik (+ bölünmede ek); montajda parça kimliği */
+export interface KeyedSolid {
+  key: string;
+  shape: Shape3D;
+}
+
 interface State {
-  shape: Shape3D | null;
+  /** Ayrı katılar (oluşma sırasıyla; ilk katı gövdenin asıl parçası) */
+  solids: KeyedSolid[];
   sketches: Map<string, SketchFeature>;
   /** featureId → araç katıları (desen/ayna için) */
   tools: Map<string, Tool[]>;
@@ -248,30 +258,92 @@ interface State {
 }
 
 export interface ShapeBuildResult {
+  /** Tüm katılar tek şekil (bileşik); katı yoksa null */
   shape: Shape3D | null;
+  solids: KeyedSolid[];
   featureErrors: Record<string, string>;
+}
+
+/** Tüm katılar tek şekil (ölçü / kenar arama için); katı yoksa null */
+function whole(st: State): Shape3D | null {
+  return st.solids.length ? compoundOf(st.solids.map((s) => s.shape)) : null;
 }
 
 /** Gövdenin o anki ölçeğine göre "tüm gövde boyunca" uzunluğu */
 function throughLength(st: State, f: Frame, fallback: number): number {
-  if (!st.shape || !solidCount(st.shape)) return Math.max(fallback * 4, 1000);
-  const { diag, center } = bboxInfo(st.shape);
+  const w = whole(st);
+  if (!w) return Math.max(fallback * 4, 1000);
+  const { diag, center } = bboxInfo(w);
   return 2 * (diag + vlen(sub(center, f.o))) + 10;
 }
 
-function applyOp(st: State, op: BoolOp, tool: Shape3D) {
+/** Kutuları (küçük payla) kesişiyor mu: boolean denemesinden önce hızlı eleme */
+function boxesTouch(a: Shape3D, b: Shape3D): boolean {
+  const [amin, amax] = a.boundingBox.bounds as [Vec3, Vec3];
+  const [bmin, bmax] = b.boundingBox.bounds as [Vec3, Vec3];
+  const tol = 1e-6 + 1e-6 * Math.max(vlen(sub(amax, amin)), vlen(sub(bmax, bmin)));
+  for (let i = 0; i < 3; i++) if (amin[i] > bmax[i] + tol || bmin[i] > amax[i] + tol) return false;
+  return true;
+}
+
+const piecesOf = (s: AnyShape): Shape3D[] => s.solids as unknown as Shape3D[];
+
+/**
+ * Araç katısını gövdeye uygular. add + merge: dokunduğu katılarla birleşir (birleşen katı en eski katının
+ * anahtarını ve sırasını alır); add + !merge ya da hiçbir katıya dokunmayan parça: yeni katı (anahtar = key).
+ * cut: her katıdan çıkarılır; ikiye bölünen katının ek parçaları "anahtar~n" alır.
+ */
+function applyOp(st: State, op: BoolOp, tool: Shape3D, key: string, merge = true) {
+  const pieces = piecesOf(tool);
   if (op === 'add') {
-    if (!st.shape || !solidCount(st.shape)) {
-      st.shape = tool.clone();
-      return;
-    }
-    const r = st.shape.fuse(tool);
-    if (!solidCount(r)) throw new FeatureError('Birleştirme başarısız');
-    st.shape = r;
+    if (!pieces.length) throw new FeatureError('Birleştirme başarısız');
+    let list = [...st.solids];
+    pieces.forEach((piece, i) => {
+      const k = i ? `${key}#${i}` : key;
+      if (!merge) {
+        list.push({ key: k, shape: piece });
+        return;
+      }
+      let acc: Shape3D = piece;
+      let at = -1;
+      let accKey = k;
+      const rest: KeyedSolid[] = [];
+      for (const s of list) {
+        if (!boxesTouch(acc, s.shape)) {
+          rest.push(s);
+          continue;
+        }
+        let r: Shape3D;
+        try {
+          r = acc.fuse(s.shape);
+        } catch (e) {
+          throw new FeatureError(errText(e, 'Birleştirme başarısız'));
+        }
+        if (solidCount(r) === 1) {
+          acc = r;
+          if (at < 0) {
+            at = rest.length;
+            accKey = s.key;
+          }
+        } else rest.push(s);
+      }
+      if (at < 0) rest.push({ key: accKey, shape: acc });
+      else rest.splice(at, 0, { key: accKey, shape: acc });
+      list = rest;
+    });
+    st.solids = list;
   } else {
-    if (!st.shape || !solidCount(st.shape)) throw new FeatureError('Kesilecek katı yok');
-    const r = st.shape.cut(tool);
-    st.shape = solidCount(r) ? r : null;
+    if (!st.solids.length) throw new FeatureError('Kesilecek katı yok');
+    const out: KeyedSolid[] = [];
+    for (const s of st.solids) {
+      if (!boxesTouch(s.shape, tool)) {
+        out.push(s);
+        continue;
+      }
+      const r = s.shape.cut(tool);
+      piecesOf(r).forEach((p, j) => out.push({ key: j ? `${s.key}~${j}` : s.key, shape: p }));
+    }
+    st.solids = out;
   }
 }
 
@@ -338,7 +410,7 @@ function doExtrude(st: State, ft: ExtrudeFeature) {
     solids.push(basicFaceExtrusion(base, new Vector(mul(frame.n, s1 - s0))));
   }
   const tool = solids.length === 1 ? solids[0] : fuseAll(solids);
-  applyOp(st, ft.operation, tool);
+  applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
   st.tools.set(ft.id, [{ op: ft.operation, shape: tool }]);
 }
 
@@ -368,18 +440,44 @@ function doRevolve(st: State, ft: RevolveFeature) {
   }
   const tool = solids.length === 1 ? solids[0] : fuseAll(solids);
   if (!solidCount(tool)) throw new FeatureError('Döndürme katı üretmedi (profil ekseni kesiyor olabilir)');
-  applyOp(st, ft.operation, tool);
+  applyOp(st, ft.operation, tool, ft.id, ft.merge !== false);
   st.tools.set(ft.id, [{ op: ft.operation, shape: tool }]);
 }
 
 function doFilletChamfer(st: State, ft: FilletFeature | ChamferFeature): string | null {
-  if (!st.shape || !solidCount(st.shape)) throw new FeatureError('Katı yok');
+  const all = whole(st);
+  if (!all) throw new FeatureError('Katı yok');
   if (!ft.edges.length) throw new FeatureError('Kenar seçilmedi');
   const value = ft.type === 'fillet' ? ft.radius : ft.distance;
   if (!(value > 0)) throw new FeatureError(ft.type === 'fillet' ? 'Yarıçap sıfırdan büyük olmalı' : 'Mesafe sıfırdan büyük olmalı');
-  const { edges, missing } = matchEdges(st.shape, ft.edges);
+  const { edges, missing } = matchEdges(all, ft.edges);
   if (!edges.length) throw new FeatureError('Seçilen kenarlar bulunamadı');
-  const base = st.shape;
+  // Her katıya yalnız kendi kenarları uygulanır (katılar ayrı kalır)
+  let used = 0;
+  const out: KeyedSolid[] = [];
+  for (const s of st.solids) {
+    const own = s.shape.edges;
+    const mine = edges.filter((e) => own.some((o) => o.isSame(e)));
+    if (!mine.length) {
+      out.push(s);
+      continue;
+    }
+    const r = filletSolid(s.shape, mine, ft.type, value);
+    out.push({ key: s.key, shape: r.shape });
+    used += r.used;
+  }
+  st.solids = out;
+  const skipped = edges.length - used;
+  if (missing || skipped) {
+    const parts = [missing ? `${missing} kenar bulunamadı` : '', skipped ? `${skipped} kenara uygulanamadı` : ''].filter(Boolean);
+    return `Uyarı: ${parts.join(', ')}; ${used} kenara uygulandı`;
+  }
+  return null;
+}
+
+/** Tek katıya radyus/pah; uygulanamayan kenarlar atlanır (hiçbiri olmazsa hata) */
+function filletSolid(base: Shape3D, edges: Edge[], type: 'fillet' | 'chamfer', value: number): { shape: Shape3D; used: number } {
+  const ft = { type };
   const apply = (list: Edge[]): Shape3D | null => {
     const set = new Set(list.map((e) => e.hashCode));
     const pick = (e: Edge) => (set.has(e.hashCode) && list.some((x) => x.isSame(e)) ? value : null);
@@ -405,24 +503,19 @@ function doFilletChamfer(st: State, ft: FilletFeature | ChamferFeature): string 
       ft.type === 'fillet' ? 'Radyus uygulanamadı (yarıçap çok büyük olabilir)' : 'Pah uygulanamadı (mesafe çok büyük olabilir)',
     );
   }
-  st.shape = r;
-  const skipped = edges.length - used.length;
-  if (missing || skipped) {
-    const parts = [missing ? `${missing} kenar bulunamadı` : '', skipped ? `${skipped} kenara uygulanamadı` : ''].filter(Boolean);
-    return `Uyarı: ${parts.join(', ')}; ${used.length} kenara uygulandı`;
-  }
-  return null;
+  return { shape: r, used: used.length };
 }
 
 function doHole(st: State, ft: HoleFeature) {
-  if (!st.shape || !solidCount(st.shape)) throw new FeatureError('Kesilecek katı yok');
+  const all = whole(st);
+  if (!all) throw new FeatureError('Kesilecek katı yok');
   if (!ft.points.length) throw new FeatureError('Delik merkezi seçilmedi');
   if (!(ft.diameter > 0)) throw new FeatureError('Çap sıfırdan büyük olmalı');
   const frame = frameOf(ft.plane);
   const r = ft.diameter / 2;
   const depth = ft.throughAll ? throughLength(st, frame, r) : ft.depth;
   if (!(depth > 0)) throw new FeatureError('Derinlik sıfırdan büyük olmalı');
-  const { diag } = bboxInfo(st.shape);
+  const { diag } = bboxInfo(all);
   // Yüzeyin biraz üstünden başla (çakışık yüz sorunlarını önler)
   const ext = Math.max(0.01, diag * 1e-4);
 
@@ -453,7 +546,7 @@ function doHole(st: State, ft: HoleFeature) {
     tools.push(revolution(face, c, frame.n, 360));
   }
   const tool = compoundOf(tools);
-  applyOp(st, 'cut', tool);
+  applyOp(st, 'cut', tool, ft.id);
   st.tools.set(ft.id, [{ op: 'cut', shape: tool }]);
 }
 
@@ -478,7 +571,7 @@ function applyCopies(st: State, id: string, src: Tool[], xforms: ((s: Shape3D) =
     for (const xf of xforms) for (const t of group) copies.push(xf(t.shape.clone()));
     if (!copies.length) continue;
     const tool = compoundOf(copies);
-    applyOp(st, op, tool);
+    applyOp(st, op, tool, id);
     made.push({ op, shape: tool });
   }
   st.tools.set(id, made);
@@ -517,11 +610,10 @@ function doMirror(st: State, ft: MirrorFeature) {
   const frame = frameOf(ft.plane);
   const mir = (s: Shape3D) => s.mirror(frame.n, frame.o);
   if (!ft.featureIds.length) {
-    if (!st.shape || !solidCount(st.shape)) throw new FeatureError('Aynalanacak katı yok');
-    const m = mir(st.shape.clone());
-    const r = st.shape.fuse(m);
-    if (!solidCount(r)) throw new FeatureError('Aynalama başarısız');
-    st.shape = r;
+    const all = whole(st);
+    if (!all) throw new FeatureError('Aynalanacak katı yok');
+    const m = mir(all.clone());
+    applyOp(st, 'add', m, ft.id);
     st.tools.set(ft.id, [{ op: 'add', shape: m }]);
     return;
   }
@@ -542,14 +634,14 @@ const FAIL_TEXT: Record<Feature['type'], string> = {
 
 /** Özellik geçmişinden katı üretir (mesh'siz) */
 export function buildShape(body: Body): ShapeBuildResult {
-  const st: State = { shape: null, sketches: new Map(), tools: new Map(), suppressedSketches: new Set() };
+  const st: State = { solids: [], sketches: new Map(), tools: new Map(), suppressedSketches: new Set() };
   const featureErrors: Record<string, string> = {};
   for (const ft of body.features) {
     if (ft.suppressed) {
       if (ft.type === 'sketch') st.suppressedSketches.add(ft.id);
       continue;
     }
-    const before = st.shape;
+    const before = st.solids;
     try {
       switch (ft.type) {
         case 'sketch':
@@ -583,11 +675,12 @@ export function buildShape(body: Body): ShapeBuildResult {
           throw new FeatureError('Bilinmeyen özellik türü');
       }
     } catch (e) {
-      st.shape = before;
+      st.solids = before;
       featureErrors[ft.id] = errText(e, FAIL_TEXT[(ft as Feature).type] ?? 'Özellik başarısız');
     }
   }
-  return { shape: st.shape && solidCount(st.shape) ? st.shape : null, featureErrors };
+  const solids = st.solids.filter((s) => solidCount(s.shape));
+  return { shape: solids.length ? compoundOf(solids.map((s) => s.shape)) : null, solids, featureErrors };
 }
 
 export { measureVolume };

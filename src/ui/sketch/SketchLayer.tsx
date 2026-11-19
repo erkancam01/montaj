@@ -1,5 +1,6 @@
 // Sketch katmanı (Canvas içinde): düzlem ızgarası, eksenler, varlıklar, bölgeler, ölçüler, önizleme,
 // kamera hizalama ve canvas DOM girdisi. Ayrıca aktif gövdenin diğer sketch'lerini ince çizgilerle gösterir.
+import { bodyPrimaryPart } from '@/core/modeling/bodyParts';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
@@ -75,7 +76,7 @@ function useInstanceKey(bodyId: string): string {
   return useAssembly((s) => {
     const fid = bodyFileId(bodyId);
     const i = s.doc.instances.find((x) => x.fileId === fid);
-    const p = s.doc.parts.find((x) => x.fileId === fid);
+    const p = bodyPrimaryPart(s.doc, bodyId);
     const t = (o?: { position: number[]; quaternion: number[] }) => (o ? `${o.position.join(',')}|${o.quaternion.join(',')}` : '');
     return `${t(i)}/${t(p)}`;
   });

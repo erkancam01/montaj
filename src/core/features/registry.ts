@@ -65,6 +65,7 @@ export const FEATURES: { [T in FeatureType]: FeatureDef<T> } = {
       reverse: false,
       throughAll: false,
       operation: 'add',
+      merge: true,
     }),
     fields: (f) => (f.throughAll ? [] : f.extent === 'twoSides' ? [mm('distance', 'Mesafe'), mm('distance2', 'Mesafe 2')] : [mm('distance', 'Mesafe')]),
     uses: (f) => [f.sketchId],
@@ -72,7 +73,7 @@ export const FEATURES: { [T in FeatureType]: FeatureDef<T> } = {
   revolve: {
     label: 'Revolve',
     icon: 'revolve',
-    defaults: ({ sketchId }) => ({ sketchId, profilePoints: [], axisLineId: '', angle: 360, reverse: false, operation: 'add' }),
+    defaults: ({ sketchId }) => ({ sketchId, profilePoints: [], axisLineId: '', angle: 360, reverse: false, operation: 'add', merge: true }),
     fields: () => [deg('angle', 'Açı')],
     uses: (f) => [f.sketchId],
   },

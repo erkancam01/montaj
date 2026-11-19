@@ -5,6 +5,7 @@
 //       → gövde-yerel (gövde⁻¹ ∘ kaynakDünya) → sketch-2B eğriler → kimlikleri kararlı sketch varlıkları.
 // Varlık kimlikleri projeksiyon id'si + sıra numarasıdır; aynı kaynaktan aynı sırada üretildiği sürece
 // kullanıcı kısıtları (çakışık, ölçü…) yeniden hesaplamadan sonra da aynı varlığa bağlı kalır.
+import { bodyPrimaryPart } from '@/core/modeling/bodyParts';
 import { getFaceGeom } from '@/core/geometry/faceGeometry';
 import { geometryCache, type ParsedMesh } from '@/core/geometry/geometryCache';
 import { composeT, invertT, partWorld } from '@/core/math/math';
@@ -25,7 +26,7 @@ import type {
   Vec2,
   Vec3,
 } from '@/core/types';
-import { bodyFileId, isBodyFileId } from '@/core/types';
+import { isBodyFileId } from '@/core/types';
 import { applyFaceMatch, faceRefSig, matchFaceRef } from '@/core/modeling/faceMatch';
 import { liveSourcesOf } from '@/core/modeling/refLocks';
 
@@ -61,9 +62,8 @@ function perpOf(n: Vec3): Vec3 {
 
 /** Gövde çerçevesi (gövde-yerel → dünya) verilen belgede */
 export function bodyFrameIn(doc: Doc, bodyId: string): Transform | null {
-  const fid = bodyFileId(bodyId);
-  const inst = doc.instances.find((i) => i.fileId === fid);
-  const part = inst && doc.parts.find((p) => p.instanceId === inst.id);
+  const part = bodyPrimaryPart(doc, bodyId);
+  const inst = part && doc.instances.find((i) => i.id === part.instanceId);
   return inst && part ? partWorld(inst, part) : null;
 }
 
