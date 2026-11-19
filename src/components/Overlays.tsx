@@ -10,6 +10,7 @@ import { IconClose, IconMate, IconPlus, IconUpload } from './icons';
 import { AddFilesButton } from './Toolbar';
 import { SketchToolbar } from './sketch/SketchToolbar';
 import { PickHint } from './modeling/PickHint';
+import { BASE_PLANES, createBody, startSketch } from '../modeling/actions';
 
 export function Overlays() {
   return (
@@ -23,6 +24,18 @@ export function Overlays() {
       <DropLayer />
     </div>
   );
+}
+
+const PLANES = [
+  ['XY', 'Üst (XY)'],
+  ['XZ', 'Ön (XZ)'],
+  ['YZ', 'Sağ (YZ)'],
+] as const;
+
+/** Boş sahneden doğrudan yeni parametrik parça + sketch başlatır */
+function drawNewPart(k: keyof typeof BASE_PLANES) {
+  const id = createBody();
+  startSketch(id, BASE_PLANES[k]);
 }
 
 function EmptyState() {
@@ -41,6 +54,18 @@ function EmptyState() {
         </AddFilesButton>
         <div className="empty-formats">
           Desteklenen: STEP (.step, .stp) · IGES (.iges, .igs) · BREP (.brep, .brp) · Proje (.zip)
+        </div>
+        <div className="empty-divider">
+          <span>ya da</span>
+        </div>
+        <div className="empty-title">Yeni parça çiz</div>
+        <div className="empty-sub">Çizime başlanacak düzlemi seçin</div>
+        <div className="empty-planes">
+          {PLANES.map(([k, label]) => (
+            <button key={k} type="button" className="btn" onClick={() => drawNewPart(k)}>
+              {label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

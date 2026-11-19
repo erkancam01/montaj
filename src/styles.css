@@ -755,6 +755,31 @@ kbd {
   font-size: 11.5px;
 }
 
+.empty-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  align-self: stretch;
+  margin: 10px 0 4px;
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+.empty-divider::before,
+.empty-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.empty-planes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
 .jobs {
   position: absolute;
   left: 12px;
