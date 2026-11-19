@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { GizmoHelper, GizmoViewport } from '@react-three/drei';
 import { NeutralToneMapping } from 'three';
@@ -38,8 +39,22 @@ function onPointerMissed(e: MouseEvent) {
  * 3D montaj sahnesi (Z-yukarı, mm). Kamera: SolidWorks şeması (CameraRig → CadControls);
  * görünüm kısayolları ve Space menüsü burada bağlanır.
  */
+/** Dar ekran (telefon): eksen göstergesi küçülür */
+function useNarrow(): boolean {
+  const q = '(max-width: 899px)';
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && window.matchMedia(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia(q);
+    const on = () => setNarrow(m.matches);
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  }, []);
+  return narrow;
+}
+
 export function Viewport() {
   useViewShortcuts();
+  const narrow = useNarrow();
   return (
     <>
       <Canvas camera={CAMERA} gl={GL} dpr={DPR} style={STYLE} onPointerMissed={onPointerMissed}>
@@ -54,8 +69,8 @@ export function Viewport() {
         <SketchLayer />
         <PickLayer />
         <CameraRig />
-        <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
-          <GizmoViewport axisColors={['#e5484d', '#30a46c', '#3e7bfa']} labelColor="#ffffff" />
+        <GizmoHelper alignment="bottom-right" margin={narrow ? [42, 42] : [72, 72]}>
+          <GizmoViewport axisColors={['#e5484d', '#30a46c', '#3e7bfa']} labelColor="#ffffff" scale={narrow ? 26 : 40} />
         </GizmoHelper>
       </Canvas>
       <ViewMenu />
