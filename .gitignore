@@ -3,3 +3,8 @@ dist/
 public/occt-import-js.js
 public/occt-import-js.wasm
 *.log
+.claude/worktrees/
+*.STEP
+*.step
+*.stp
+*.STP
