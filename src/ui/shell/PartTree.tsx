@@ -21,6 +21,8 @@ import { PopupMenu, type MenuEntry } from '@/ui/commands/PopupMenu';
 import { extraKeys, groupByPart, groupColor, GroupList, isAdditive } from '@/ui/assembly/GroupList';
 import { IconChevron, IconEye, IconEyeOff, IconLink } from '@/ui/icons/icons';
 import { MateList } from '@/ui/assembly/MateList';
+import { loadBlob } from '@/services/io/persistence';
+import { addBlobToLibrary } from '@/services/io/library';
 import { longPressProps } from '@/ui/hooks/useLongPress';
 import { FIcon } from '@/ui/icons/featureIcons';
 import { BodyFeatureList, BuildBadge, RenameInput } from '@/ui/modeling/FeatureTree';
@@ -133,6 +135,18 @@ export function PartTree() {
       {open ? <CommandPanel /> : activeBodyId ? <PartModeTree bodyId={activeBodyId} /> : <DesignTree />}
     </aside>
   );
+}
+
+/** Bileşenin kaynak dosyasını kütüphaneye kopyalar */
+async function addInstanceToLibrary(fileId: string) {
+  const st = useAssembly.getState();
+  const meta = st.doc.files.find((f) => f.id === fileId);
+  const blob = meta ? await loadBlob(fileId).catch(() => undefined) : undefined;
+  if (!meta || !blob) {
+    st.showToast('Bileşenin kaynak dosyası bulunamadı', 'error');
+    return;
+  }
+  await addBlobToLibrary(blob, meta.name);
 }
 
 const PLANE_ROWS: { k: BasePlaneKey; label: string }[] = [
@@ -322,6 +336,13 @@ const InstanceRow = memo(function InstanceRow({ id }: { id: string }) {
     { label: 'Odakla', icon: 'focus', onClick: () => focusInstance(id) },
     { label: 'Yeniden adlandır', icon: 'rename', onClick: () => setRenaming(true) },
     { label: open ? 'Daralt' : 'Genişlet', onClick: () => setOpen((o) => !o) },
+    'sep',
+    {
+      label: 'Kütüphaneye ekle',
+      icon: 'addFile',
+      title: 'Bu bileşenin dosyasını tasarım kütüphanesine kaydet',
+      onClick: () => void addInstanceToLibrary(info.fileId),
+    },
   ];
 
   return (

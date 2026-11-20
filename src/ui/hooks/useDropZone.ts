@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 
 function hasFiles(e: DragEvent): boolean {
   const types = e.dataTransfer?.types;
-  return !!types && Array.from(types).includes('Files');
+  if (!types || !Array.from(types).includes('Files')) return false;
+  // Kendi bırakma işini yapan alanlar (data-own-drop, ör. kütüphane paneli) genel katmanı tetiklemez
+  return !(e.target instanceof Element && e.target.closest('[data-own-drop]'));
 }
 
 /** Sürükleme pencerenin üzerindeyken true döner */
