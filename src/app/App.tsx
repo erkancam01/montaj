@@ -15,6 +15,8 @@ import { HelpDialog } from '@/ui/shell/HelpDialog';
 import { useCommandKind } from '@/ui/commands/CommandPanel';
 import { DrawerBackdrop, MobileDock } from '@/ui/mobile/MobileDock';
 import { useMobileUi } from '@/ui/mobile/mobileStore';
+import { LibraryDock } from '@/ui/library/LibraryPanel';
+import { LibraryViewportDrop } from '@/ui/library/LibraryViewportDrop';
 
 export function App() {
   useShortcuts();
@@ -41,6 +43,8 @@ export function App() {
       <main className="viewport-box">
         <Viewport />
         <Overlays />
+        <LibraryViewportDrop />
+        <LibraryDock />
         <MobileDock />
       </main>
       <Inspector />

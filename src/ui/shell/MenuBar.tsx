@@ -22,6 +22,7 @@ import { exportGlb, exportPng, exportStep, openFilePicker, saveProjectZip } from
 import { openHelp } from '@/ui/shell/HelpDialog';
 import { openNewDialog } from '@/ui/shell/NewDialog';
 import { runFeatureTool } from '@/ui/shell/Toolbar';
+import { toggleLibrary, useLibraryUi } from '@/ui/library/libraryUi';
 
 const st = () => useAssembly.getState();
 
@@ -97,6 +98,13 @@ function viewEntries(): MenuEntry[] {
       title: 'Ön / Üst / Sağ temel düzlemleri sahnede göster',
       onClick: () => useCommandUi.getState().set({ showPlanes: !useCommandUi.getState().showPlanes }),
     },
+    'sep',
+    {
+      label: useLibraryUi.getState().open ? 'Tasarım kütüphanesini kapat' : 'Tasarım kütüphanesi',
+      icon: 'addFile',
+      title: 'Kayıtlı parçalar: sahneye sürükleyerek montaja ekleyin',
+      onClick: toggleLibrary,
+    },
   ];
 }
 
@@ -116,6 +124,7 @@ function insertEntries(): MenuEntry[] {
   return [
     { heading: 'Bileşen' },
     { label: 'Dosyadan…', icon: 'addFile', disabled: sketch, title: 'STEP, IGES, BREP dosyasını montaja ekle', onClick: openFilePicker },
+    { label: 'Kütüphaneden…', icon: 'addFile', disabled: sketch, title: 'Tasarım kütüphanesini aç', onClick: () => useLibraryUi.getState().setOpen(true) },
     { label: 'Yeni parça', icon: 'newPart', disabled: sketch, onClick: () => runCommand('newpart', 'Yeni parça', newPart) },
     'sep',
     sketch

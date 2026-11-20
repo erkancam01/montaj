@@ -41,6 +41,7 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | `src/ui/modeling/` | Özellik formları (`FeatureInspector.tsx`), özellik ağacı, sahneden yüz/kenar seçme |
 | `src/ui/assembly/` | Mate ve grup panelleri |
 | `src/ui/params/` | Parametreler penceresi, ifade alanı |
+| `src/ui/library/` | Tasarım kütüphanesi paneli (sağ kenar), sahneye sürükle-bırak |
 | `src/ui/mobile/` | Telefon düzeni (çekmeceler, alt sayfa) — `mobile.css` en son yüklenir |
 
 ## Neyi değiştirmek için nereye bakılır
@@ -70,6 +71,7 @@ Import'lar `@/` ile yazılır (`@/core/...`, `@/ui/...`): dosya taşınsa da di�
 | Proje kaydı / açma | `src/services/io/session.ts`, `persistence.ts` |
 | DXF içe aktarma (okuma / temizlik) | `src/core/import/dxf.ts` · pencere: `src/ui/sketch/DxfImportDialog.tsx` |
 | Süpür geometrisi (yol zinciri, profil yerleşimi, köşeler) | `src/services/kernel/build.ts` (`doSweep`, `pathChain`) |
+| Parça kütüphanesi (kayıt, klasör, küçük resim, .zip) | `src/services/io/library.ts`, `libraryThumb.ts` · durum `src/state/libraryStore.ts` · panel `src/ui/library/LibraryPanel.tsx` |
 | STEP okuma / yazma | `src/services/io/stepLoader.ts`, `src/services/kernel/exportStep.ts` |
 
 ### Yeni özellik eklemek (ör. "Kabuk")

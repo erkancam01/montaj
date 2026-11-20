@@ -41,6 +41,11 @@ doğru katmana koy; `core` içine React/store/ui, `state`/`services` içine ui i
 - Commit mesajını PowerShell'de dosyadan ver (`git commit -F dosya`); Türkçe karakter/tırnaklar komut satırında bozuluyor.
 - Kullanıcının STEP dosyalarını (ör. `*.STEP` kökte) git'e ekleme.
 
+## Parça kütüphanesi
+Sahnenin sağ kenarındaki "Kütüphane" sekmesi (Görünüm / Ekle menüsünden de). Dosyalar projeden ayrı IndexedDB
+veritabanında (`step-montaj-lib`) durur; yeni proje / proje .zip açma silmez. Sahneye sürükle, çift tıkla ya da
++ ile montaja eklenir (dosyanın kendi koordinatlarında). Taşımak için kütüphane .zip dışa / içe aktarılır.
+
 ## Bilinen eksikler / sıradaki fikirler
 - Arayüz: mate'ler ağaçta yalnız sondaki klasörde (bileşen altında değil); ağaçta geri alma çubuğu (rollback) yok;
   Chrome Ctrl+N'yi çoğu zaman kendine ayırır (Dosya ▸ Yeni kullanılır).
